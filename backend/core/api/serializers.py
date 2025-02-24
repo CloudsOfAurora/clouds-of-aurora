@@ -34,14 +34,33 @@ class BuildingSerializer(serializers.ModelSerializer):
             "settlement_id",
             "coordinate_x",
             "coordinate_y",
+            "assigned_settlers",
             "description",
         ]
 
 
 class SettlerSerializer(serializers.ModelSerializer):
+    assigned_building = BuildingSerializer(read_only=True)
+    gathering_resource_node = serializers.SerializerMethodField()
+
     class Meta:
         model = Settler
-        fields = ['id', 'settlement', 'name', 'status', 'mood', 'hunger', 'assigned_building']
+        fields = [
+            'id', 'name', 'status', 'mood', 'hunger',
+            'assigned_building', 'gathering_resource_node',
+            'settlement_id', 'birth_tick', 'experience'
+        ]
+
+    def get_gathering_resource_node(self, obj):
+        if obj.gathering_resource_node:
+            return {
+                'id': obj.gathering_resource_node.id,
+                'name': obj.gathering_resource_node.name,
+                'resource_type': obj.gathering_resource_node.resource_type,
+                'quantity': obj.gathering_resource_node.quantity,
+                'max_quantity': obj.gathering_resource_node.max_quantity,
+            }
+        return None
 
 class SettlementSerializer(serializers.ModelSerializer):
     buildings = BuildingSerializer(many=True, read_only=True)
@@ -49,8 +68,9 @@ class SettlementSerializer(serializers.ModelSerializer):
     net_food_rate = serializers.SerializerMethodField()
     net_wood_rate = serializers.SerializerMethodField()
     net_stone_rate = serializers.SerializerMethodField()
+    net_magic_rate = serializers.SerializerMethodField()
     current_season = serializers.SerializerMethodField()
-    popularity_index = serializers.SerializerMethodField()  # New field
+    popularity_index = serializers.SerializerMethodField()  
 
     class Meta:
         model = Settlement
@@ -60,6 +80,7 @@ class SettlementSerializer(serializers.ModelSerializer):
             'food',
             'wood',
             'stone',
+            'magic',
             'created_at',
             'last_updated',
             'buildings',
@@ -67,8 +88,9 @@ class SettlementSerializer(serializers.ModelSerializer):
             'net_food_rate',
             'net_wood_rate',
             'net_stone_rate',
+            'net_magic_rate',
             'current_season',
-            'popularity_index',  # Included in output
+            'popularity_index', 
         ]
 
     def _get_modifiers(self):
@@ -93,6 +115,9 @@ class SettlementSerializer(serializers.ModelSerializer):
         prod_modifier, cons_modifier, _ = self._get_modifiers()
         net_rates = obj.calculate_net_resource_rates(prod_modifier, cons_modifier)
         return round(net_rates.get("stone", 0), 1)
+    
+    def get_net_magic_rate(self, obj):
+        return 0
 
     def get_current_season(self, obj):
         _, _, current_season = self._get_modifiers()
@@ -128,9 +153,12 @@ class LoreEntrySerializer(serializers.ModelSerializer):
 from core.models import Settlement, Building, Settler, LoreEntry, MapTile, GameState, ResourceNode
 
 class ResourceNodeSerializer(serializers.ModelSerializer):
+    gatherer_id = serializers.SerializerMethodField()
+    def get_gatherer_id(self, obj):
+        return obj.gatherer.id if obj.gatherer else None
     class Meta:
         model = ResourceNode
-        fields = ['id', 'name', 'resource_type', 'quantity', 'max_quantity', 'lore']
+        fields = ['id', 'name', 'resource_type', 'quantity', 'max_quantity', 'lore', 'gatherer_id']
 
 class MapTileSerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField()

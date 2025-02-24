@@ -1,4 +1,3 @@
-# core/models.py
 from django.db import models
 from django.contrib.auth.models import User  # Import the built-in User model
 
@@ -10,12 +9,14 @@ class GameState(models.Model):
     def __str__(self):
         return f"Tick: {self.tick_count}, Season: {self.current_season}"
 
+
 # Updated Settlement model to include an owner (User) and created_at field
 class Settlement(models.Model):
     name = models.CharField(max_length=100)
     food = models.IntegerField(default=50)
     wood = models.IntegerField(default=50)
     stone = models.IntegerField(default=50)
+    magic = models.IntegerField(default=0)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="settlements")
     created_at = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
@@ -31,24 +32,19 @@ class Settlement(models.Model):
         from core.config import PRODUCTION_RATES, PRODUCTION_TICK, VILLAGER_CONSUMPTION_RATE, FEEDING_TICK
         
         production_totals = {}
-
-        # Consider only buildings that are constructed and have at least one worker
         production_buildings = self.buildings.filter(is_constructed=True, assigned_settlers__isnull=False).distinct()
         for building in production_buildings:
             if building.building_type in PRODUCTION_RATES:
                 worker_count = building.assigned_settlers.count()
                 for resource, rate in PRODUCTION_RATES[building.building_type].items():
-                    # Accumulate production per resource (supports multi-resource production)
                     production_totals[resource] = production_totals.get(resource, 0) + (rate * prod_modifier * worker_count / PRODUCTION_TICK)
-
-        # Villagers currently consume food only.
         villager_count = self.settlers.filter(status__in=["idle", "working"]).count()
         food_consumption = villager_count * (VILLAGER_CONSUMPTION_RATE / FEEDING_TICK * cons_modifier)
         production_totals["food"] = production_totals.get("food", 0) - food_consumption
-
         return production_totals
 
 
+# Single definition of MapTile model
 class MapTile(models.Model):
     TERRAIN_CHOICES = (
         ('grass', 'Grass'),
@@ -115,11 +111,11 @@ class LoreEntry(models.Model):
     
 
 class Settler(models.Model):
-    STATUS_CHOICES = (('idle', 'Idle'), ('working', 'Working'), ('dead', 'Dead'))
+    STATUS_CHOICES = (('idle', 'Idle'), ('working', 'Working'), ('gathering', 'Gathering'), ('dead', 'Dead'))
     MOOD_CHOICES = (('content', 'Content'), ('hungry', 'Hungry'), ('sick', 'Sick'))
     settlement = models.ForeignKey("Settlement", on_delete=models.CASCADE, related_name='settlers')
     name = models.CharField(max_length=100)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='idle')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='idle')
     mood = models.CharField(max_length=10, choices=MOOD_CHOICES, default='content')
     hunger = models.IntegerField(default=0)
     assigned_building = models.ForeignKey(
@@ -128,7 +124,6 @@ class Settler(models.Model):
     housing_assigned = models.ForeignKey(
         "Building", on_delete=models.SET_NULL, null=True, blank=True, related_name='housed_settlers'
     )
-    # New field to track resource gathering assignment (optional; can be derived from ResourceNode.gatherer)
     gathering_resource_node = models.ForeignKey(
         'ResourceNode',
         on_delete=models.SET_NULL,
@@ -142,25 +137,7 @@ class Settler(models.Model):
     def __str__(self):
         return self.name
 
-class MapTile(models.Model):
-    TERRAIN_CHOICES = (
-        ('grass', 'Grass'),
-        ('forest', 'Forest'),
-        ('bush', 'Bush'),
-        ('stone_deposit', 'Stone Deposit'),
-        ('mountain', 'Mountain'),
-        ('river', 'River'),
-        ('ley_line', 'Magical Ley Line'),
-    )
-    settlement = models.ForeignKey(Settlement, on_delete=models.CASCADE, related_name='map_tiles')
-    coordinate_x = models.IntegerField()
-    coordinate_y = models.IntegerField()
-    terrain_type = models.CharField(max_length=20, choices=TERRAIN_CHOICES)
 
-    def __str__(self):
-        return f"Tile ({self.coordinate_x}, {self.coordinate_y}) - {self.terrain_type}"
-
-# New Model for Nature & Resource Nodes
 class ResourceNode(models.Model):
     RESOURCE_TYPE_CHOICES = (
         ('food', 'Food'),
@@ -175,7 +152,7 @@ class ResourceNode(models.Model):
     regen_rate = models.IntegerField(default=5)  # Amount regenerated per tick
     lore = models.TextField(blank=True)
     map_tile = models.ForeignKey('MapTile', on_delete=models.CASCADE, related_name='resource_nodes')
-    # New field: track the single villager gathering from this node
+    # Track the single villager gathering from this node.
     gatherer = models.OneToOneField(
         'Settler',
         on_delete=models.SET_NULL,
@@ -186,3 +163,24 @@ class ResourceNode(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.resource_type}) at Tile ({self.map_tile.coordinate_x}, {self.map_tile.coordinate_y})"
+
+    def process_gathering_tick(self):
+        if not self.gatherer:
+            return
+        from core.config import GATHER_RATES, RESOURCE_CAP
+        rate = GATHER_RATES.get(self.resource_type, 1)
+        self.quantity -= rate
+        self.save(update_fields=["quantity"])
+        settlement = self.map_tile.settlement
+        current_amount = getattr(settlement, self.resource_type, 0)
+        new_amount = min(current_amount + rate, RESOURCE_CAP)
+        setattr(settlement, self.resource_type, new_amount)
+        settlement.save(update_fields=[self.resource_type])
+        if self.quantity <= 0:
+            from core.event_logger import log_event
+            log_event(settlement, "resource_depleted", f"{self.name} has been depleted.")
+            if self.gatherer:
+                self.gatherer.gathering_resource_node = None
+                self.gatherer.status = "idle"
+                self.gatherer.save(update_fields=["gathering_resource_node", "status"])
+            self.delete()

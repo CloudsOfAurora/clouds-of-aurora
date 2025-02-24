@@ -16,6 +16,8 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 # Import our serializer for map tiles
 from core.api.serializers import MapTileSerializer, BUILDING_DESCRIPTIONS
+from core.api.serializers import SettlerSerializer
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -49,29 +51,24 @@ def buildings_view(request):
     serialized_buildings = BuildingSerializer(buildings, many=True).data
     return JsonResponse(serialized_buildings, safe=False, json_dumps_params={"indent": 2}, encoder=DjangoJSONEncoder)
 
+logger = logging.getLogger(__name__)
+
 def settlers_view(request):
     logger.debug("Received request for settlers")
     try:
+        qs = Settler.objects.select_related('assigned_building', 'gathering_resource_node').all()
+        serialized = SettlerSerializer(qs, many=True).data
+        # Calculate age and inject it into each settler's data
         gs = GameState.objects.get(pk=1)
-        qs = Settler.objects.all().values(
-            "id",
-            "name",
-            "status",
-            "mood",
-            "hunger",
-            "assigned_building_id",
-            "settlement_id",
-            "birth_tick",
-            "experience"
-        )
-        settlers_data = []
-        for settler in qs:
-            age = gs.tick_count - settler["birth_tick"] if settler["birth_tick"] is not None else "N/A"
-            settlers_data.append({**settler, "age": age})
-        logger.debug(f"Returning settlers: {settlers_data}")
-        return JsonResponse(settlers_data, safe=False)
+        for settler in serialized:
+            settler["age"] = gs.tick_count - settler["birth_tick"] if settler["birth_tick"] is not None else "N/A"
+        logger.debug(f"Returning serialized settlers: {serialized}")
+        return JsonResponse(serialized, safe=False)
     except GameState.DoesNotExist:
         return JsonResponse({"error": "GameState not found."}, status=500)
+    except Exception as e:
+        logger.exception("Error in settlers_view: %s", e)
+        return JsonResponse({"error": str(e)}, status=500)
 
 def lore_entries_view(request):
     logger.debug("Received request for lore entries")
@@ -133,7 +130,8 @@ def create_settlement(request):
             owner=request.user,
             food=STARTING_RESOURCES["food"],
             wood=STARTING_RESOURCES["wood"],
-            stone=STARTING_RESOURCES["stone"]
+            stone=STARTING_RESOURCES["stone"],
+            magic=STARTING_RESOURCES.get("magic", 0)
         )
         import random
         for _ in range(STARTING_VILLAGERS):
@@ -149,7 +147,6 @@ def create_settlement(request):
             )
         
         # Integrate map generation with resource node creation.
-        # Instead of manually creating tiles here, we call the helper function.
         from core.map_generation import generate_map_for_settlement
         generate_map_for_settlement(settlement)
         
@@ -185,7 +182,7 @@ def settlement_detail_view(request, id):
     try:
         # Get the latest settlement values directly from the DB.
         settlement_data = Settlement.objects.filter(id=id).values(
-            'id', 'name', 'food', 'wood', 'stone', 'created_at', 'last_updated'
+            'id', 'name', 'food', 'wood', 'stone', 'magic', 'created_at', 'last_updated'
         ).first()
         if not settlement_data:
             return JsonResponse({"error": "Settlement not found."}, status=404)
@@ -221,11 +218,13 @@ def settlement_detail_view(request, id):
             "food": settlement_data["food"],
             "wood": settlement_data["wood"],
             "stone": settlement_data["stone"],
+            "magic": settlement_data.get("magic", 0),
             "created_at": settlement_data["created_at"],
             "buildings": buildings,
             "net_food_rate": round(net_rates.get("food", 0), 1),
             "net_wood_rate": round(net_rates.get("wood", 0), 1),
             "net_stone_rate": round(net_rates.get("stone", 0), 1),
+            "net_magic_rate": 0,
             "current_season": current_season,
         }
         return JsonResponse(data)
@@ -393,7 +392,7 @@ def gather_resource(request):
         node.gatherer = villager
         node.save()
         villager.gathering_resource_node = node
-        villager.status = f"gathering_{node.resource_type}"
+        villager.status = "gathering"
         villager.save()
         
         # Log the event.
@@ -425,4 +424,95 @@ def settlement_events_view(request, id):
         return JsonResponse({"error": "Settlement not found."}, status=404)
     except Exception as e:
         logger.exception("Error retrieving settlement events: %s", str(e))
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+@jwt_required
+def toggle_assignment(request):
+    """
+    Endpoint to toggle assignment for an object on the map.
+    Expects: settlement_id, object_type ("building" or "resource_node"), object_id.
+    - If no villager is assigned, assign a random idle villager.
+    - If already assigned, clear the assignment.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST method is allowed."}, status=405)
+    try:
+        data = json.loads(request.body)
+        settlement_id = data.get("settlement_id")
+        object_type = data.get("object_type")
+        object_id = data.get("object_id")
+        if not settlement_id or not object_type or not object_id:
+            return JsonResponse({"error": "Missing required parameters."}, status=400)
+        
+        # Verify settlement ownership.
+        try:
+            settlement = Settlement.objects.get(id=settlement_id, owner=request.user)
+        except Settlement.DoesNotExist:
+            return JsonResponse({"error": "Settlement not found or not owned by user."}, status=404)
+        
+        # Helper: get a random idle villager.
+        idle_villagers = settlement.settlers.filter(status="idle", gathering_resource_node__isnull=True)
+        if object_type == "building":
+            try:
+                building = settlement.buildings.get(id=object_id)
+            except Building.DoesNotExist:
+                return JsonResponse({"error": "Building not found in settlement."}, status=404)
+            
+            # Toggle assignment.
+            assigned = building.assigned_settlers.all()
+            if assigned.exists():
+                # Clear assignment.
+                for villager in assigned:
+                    villager.assigned_building = None
+                    villager.status = "idle"
+                    villager.save()
+                log_event(settlement, "villager_assigned", f"Cleared assignments from {building.get_building_type_display()}: {villager.names} stopped working at {building.get_building_type_display()}.")
+                return JsonResponse({"message": "Assignment cleared."}, status=200)
+            else:
+                if not idle_villagers.exists():
+                    return JsonResponse({"error": "No idle villagers available."}, status=400)
+                villager = idle_villagers.order_by('?').first()
+                building.assigned_settlers.add(villager)
+                villager.assigned_building = building
+                villager.status = "working"
+                villager.save()
+                log_event(settlement, "villager_assigned", f"{villager.name} assigned to {building.get_building_type_display()}.")
+                return JsonResponse({"message": f"{villager.name} assigned to {building.get_building_type_display()}."}, status=200)
+        
+        elif object_type == "resource_node":
+            from core.models import ResourceNode
+            try:
+                node = ResourceNode.objects.get(id=object_id, map_tile__settlement=settlement)
+            except ResourceNode.DoesNotExist:
+                return JsonResponse({"error": "Resource node not found in settlement."}, status=404)
+            
+            if node.gatherer:
+                villager = node.gatherer
+                node.gatherer = None
+                node.save()
+                if villager:
+                    villager.gathering_resource_node = None
+                    villager.status = "idle"
+                    villager.save()
+                log_event(settlement, "villager_assigned", f"Cleared gathering assignment from {node.name}.")
+                return JsonResponse({"message": "Gathering assignment cleared."}, status=200)
+            else:
+                if not idle_villagers.exists():
+                    return JsonResponse({"error": "No idle villagers available."}, status=400)
+                villager = idle_villagers.order_by('?').first()
+                node.gatherer = villager
+                node.save()
+                villager.gathering_resource_node = node
+                # Set status to a consistent "gathering" value
+                villager.status = "gathering"
+                villager.save()
+                log_event(settlement, "villager_assigned", f"{villager.name} started gathering from {node.name}.")
+                return JsonResponse({"message": f"{villager.name} started gathering from {node.name}."}, status=200)
+
+
+        else:
+            return JsonResponse({"error": "Invalid object type."}, status=400)
+    except Exception as e:
+        logger.exception("Error in toggle_assignment: %s", str(e))
         return JsonResponse({"error": str(e)}, status=500)

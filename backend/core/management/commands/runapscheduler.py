@@ -1,11 +1,11 @@
-# core/management/commands/runapscheduler.py
+#core/management/commands/runapscheduler.py
 import logging
 from django.core.management.base import BaseCommand
 from apscheduler.schedulers.blocking import BlockingScheduler
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Building, Settlement, Settler, GameState
+from core.models import Building, Settlement, Settler, GameState, ResourceNode
 from core.config import SEASONS, SEASON_CHANGE_TICKS, SEASON_MODIFIERS, PRODUCTION_TICK
 
 # Import our new population module functions
@@ -115,16 +115,24 @@ class Command(BaseCommand):
                 gather_rate = GATHER_RATES.get(node.resource_type, 1)
                 node.quantity = max(node.quantity - gather_rate, 0)
                 node.save()
+                # Gather resource: add to settlement (works for magic as well)
+                settlement = node.map_tile.settlement
+                current_amount = getattr(settlement, node.resource_type, 0)
+                # Use RESOURCE_CAP from config (assume it’s imported elsewhere as RESOURCE_CAP)
+                from core.config import RESOURCE_CAP
+                new_amount = min(current_amount + gather_rate, RESOURCE_CAP)
+                setattr(settlement, node.resource_type, new_amount)
+                settlement.save(update_fields=[node.resource_type])
                 if node.quantity == 0:
                     from core.event_logger import log_event
-                    log_event(node.map_tile.settlement, "resource_depleted", f"{node.name} has been depleted.")
+                    log_event(settlement, "resource_depleted", f"{node.name} has been depleted.")
                     villager = node.gatherer
                     if villager:
                         villager.gathering_resource_node = None
                         villager.status = "idle"
-                        villager.save()
-                    node.gatherer = None
-                    node.save()
+                        villager.save(update_fields=["gathering_resource_node", "status"])
+                    node.delete()
+
 
 
 
@@ -184,3 +192,8 @@ class Command(BaseCommand):
                 if new_settler:
                     log_event(settlement, "villager_recruited", f"New settler {new_settler.name} recruited (popularity: {popularity}).")
                     logger.info(f"Settlement '{settlement.name}' recruited new settler: {new_settler.name}")
+
+    def process_resource_nodes():
+        nodes = ResourceNode.objects.filter(gatherer__isnull=False)
+        for node in nodes:
+            node.process_gathering_tick()

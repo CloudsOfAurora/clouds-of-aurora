@@ -5,14 +5,8 @@ from core.models import MapTile, ResourceNode
 from core.config import TERRAIN_PROBABILITIES, RESOURCE_NODES, GRID_SIZE
 
 def generate_map_for_settlement(settlement):
-    """
-    Generate a GRID_SIZE x GRID_SIZE map for the settlement.
-    For each tile, assign a terrain type based on defined probabilities,
-    and attempt to spawn a finite resource node on the tile.
-    """
     for x in range(GRID_SIZE):
         for y in range(GRID_SIZE):
-            # Determine terrain type for the tile.
             terrain_type = random.choices(
                 population=list(TERRAIN_PROBABILITIES.keys()),
                 weights=list(TERRAIN_PROBABILITIES.values()),
@@ -24,9 +18,9 @@ def generate_map_for_settlement(settlement):
                 coordinate_y=y,
                 terrain_type=terrain_type
             )
-            
-            # Attempt to spawn one resource node on this tile.
-            # Iterate through resource node types in defined order.
+            # Skip resource node generation if tile is river.
+            if terrain_type == "river":
+                continue
             for key, node in RESOURCE_NODES.items():
                 if random.random() < node["probability"]:
                     ResourceNode.objects.create(
@@ -38,4 +32,4 @@ def generate_map_for_settlement(settlement):
                         lore=node["lore"],
                         map_tile=tile
                     )
-                    break  # Allow only one resource node per tile.
+                    break

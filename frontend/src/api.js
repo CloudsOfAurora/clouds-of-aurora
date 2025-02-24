@@ -107,4 +107,10 @@ export const fetchMapTiles = async (settlementId) => {
   return response.data;
 };
 
+export const toggleAssignment = async (payload) => {
+  const response = await axiosInstance.post("/toggle_assignment/", payload);
+  return response.data;
+};
+
+
 export default axiosInstance;

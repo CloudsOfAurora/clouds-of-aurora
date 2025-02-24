@@ -48,8 +48,11 @@ class BuildingViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class SettlerViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Settler.objects.all()
     serializer_class = SettlerSerializer
+
+    def get_queryset(self):
+        # Use select_related to include assigned_building and gathering_resource_node.
+        return Settler.objects.select_related('assigned_building', 'gathering_resource_node').all()
 
 class LoreEntryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = LoreEntry.objects.all()
