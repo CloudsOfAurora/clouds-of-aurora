@@ -83,8 +83,16 @@ const GameDashboard = () => {
               {settlement.name}
             </Heading>
             <Text mb="2">
-              Food: {settlement.food} | Wood: {settlement.wood} | Stone:{" "}
-              {settlement.stone}
+              Food: {Number(settlement.food).toFixed(1)} (
+              {settlement.net_food_rate >= 0 ? "+" : ""}
+              {Number(settlement.net_food_rate || 0).toFixed(1)}) | Wood: {Number(settlement.wood).toFixed(1)} (
+              {settlement.net_wood_rate >= 0 ? "+" : ""}
+              {Number(settlement.net_wood_rate || 0).toFixed(1)}) | Stone: {Number(settlement.stone).toFixed(1)} (
+              {settlement.net_stone_rate >= 0 ? "+" : ""}
+              {Number(settlement.net_stone_rate || 0).toFixed(1)})
+            </Text>
+            <Text fontSize="lg" mb="2">
+              Happiness: {settlement.popularity_index}
             </Text>
             {/* Render the settlement visualization */}
             <SettlementCanvas settlementId={settlement.id} />

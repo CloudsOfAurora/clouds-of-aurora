@@ -1,3 +1,4 @@
+// src/components/WelcomePage.js
 import React from "react";
 import { Box, Heading, Text, Button } from "@chakra-ui/react";
 import { Link } from "react-router-dom";

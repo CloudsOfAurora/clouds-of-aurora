@@ -1,26 +1,46 @@
 // src/components/SettlementView.js
 import React, { useEffect, useState, useRef } from "react";
-import { Box, Flex, Text, Spinner, Button, Select, FormControl, FormLabel, Alert } from "@chakra-ui/react";
+import {
+  Box,
+  Flex,
+  Text,
+  Spinner,
+  Button,
+  Select,
+  FormControl,
+  FormLabel,
+  Alert,
+} from "@chakra-ui/react";
 import { useParams } from "react-router-dom";
-import SettlementCanvas from "./SettlementCanvas";
-import { fetchSettlement, fetchGameState, placeBuilding } from "../api";
+import SettlementMap from "./SettlementMap";
+import { fetchSettlement, fetchGameState, placeBuilding, fetchMapTiles } from "../api";
 import VillagerPanel from "./VillagerPanel";
 import EventLog from "./EventLog";
 
 const SettlementView = () => {
-  const { id } = useParams(); // Settlement ID from URL
+  const { id } = useParams();
   const [settlementData, setSettlementData] = useState(null);
   const [buildings, setBuildings] = useState([]);
+  const [mapTiles, setMapTiles] = useState([]);
   const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // For building placement via the main map:
+
+  // Popup and hover states.
+  const [selectedTileInfo, setSelectedTileInfo] = useState(null);
+  const [tileTooltipPos, setTileTooltipPos] = useState({ x: 0, y: 0 });
+
+  // Building placement states
   const [placementMode, setPlacementMode] = useState(false);
   const [selectedBuildingType, setSelectedBuildingType] = useState("");
   const [selectedTile, setSelectedTile] = useState(null);
   const [placementMessage, setPlacementMessage] = useState("");
   const [placementError, setPlacementError] = useState("");
+
+  // Pop-up states for building and tile info
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [buildingTooltipPos, setBuildingTooltipPos] = useState({ x: 0, y: 0 });
+
 
   const autoRefreshInterval = useRef(null);
 
@@ -31,7 +51,6 @@ const SettlementView = () => {
       setBuildings(data.buildings || []);
       setError(null);
     } catch (err) {
-      console.error("Error fetching settlement data:", err);
       setError("Error fetching settlement details.");
     }
   };
@@ -45,19 +64,27 @@ const SettlementView = () => {
     }
   };
 
+  const loadMapTiles = async () => {
+    try {
+      const tiles = await fetchMapTiles(id);
+      setMapTiles(tiles);
+    } catch (err) {
+      console.error("Error fetching map tiles:", err);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       await loadSettlementData();
       await loadGameState();
+      await loadMapTiles();
       setLoading(false);
     };
     loadData();
     autoRefreshInterval.current = setInterval(() => {
-      // Only auto-refresh settlement data if not in placement mode to preserve UI state.
       if (!placementMode) {
         loadSettlementData();
       }
-      // Always update game state for current season and tick.
       loadGameState();
     }, 5000);
     return () => clearInterval(autoRefreshInterval.current);
@@ -68,16 +95,11 @@ const SettlementView = () => {
     setSelectedTile({ tile_x, tile_y });
     if (selectedBuildingType) {
       try {
-        const payload = {
-          settlement_id: id,
-          building_type: selectedBuildingType,
-          tile_x,
-          tile_y,
-        };
+        const payload = { settlement_id: id, building_type: selectedBuildingType, tile_x, tile_y };
         const response = await placeBuilding(payload);
         setPlacementMessage(`Building placed successfully! ID: ${response.building_id}`);
         setPlacementError("");
-        loadSettlementData(); // Refresh settlement data after placement
+        await loadSettlementData();
         setPlacementMode(false);
         setSelectedTile(null);
       } catch (err) {
@@ -85,6 +107,31 @@ const SettlementView = () => {
         setPlacementMessage("");
       }
     }
+  };
+
+  const handleResourceNodeClick = (tile, pos) => {
+    setSelectedTileInfo(tile); // We'll use selectedTileInfo to display info.
+    setTileTooltipPos(pos);
+    // Optionally, clear building info if any.
+    setSelectedBuilding(null);
+    // Auto-clear after 2 seconds.
+    setTimeout(() => setSelectedTileInfo(null), 2000);
+  };
+
+  const handleBuildingClick = (building, pos) => {
+    setSelectedBuilding(building);
+    setBuildingTooltipPos(pos);
+    setSelectedTileInfo(null);
+    // Clear building pop-up after 2 seconds
+    setTimeout(() => setSelectedBuilding(null), 2000);
+  };
+
+  const handleTileInfoClick = (tile, pos) => {
+    setSelectedTileInfo(tile);
+    setTileTooltipPos(pos);
+    setSelectedBuilding(null);
+    // Clear tile pop-up after 2 seconds
+    setTimeout(() => setSelectedTileInfo(null), 2000);
   };
 
   if (loading || !settlementData) {
@@ -97,54 +144,44 @@ const SettlementView = () => {
   if (error) {
     return (
       <Flex justify="center" align="center" height="100vh">
-        <Alert status="error">
-          <Text>{error}</Text>
-        </Alert>
+        <Alert status="error"><Text>{error}</Text></Alert>
       </Flex>
     );
   }
 
   return (
-    <Flex direction="column" height="100vh">
-      {/* Map Area centered */}
+    <Flex direction="column" height="100vh" position="relative">
+      {/* Map Area */}
       <Flex flex="3" bg="gray.100" p={4} justify="center" align="center">
-        <SettlementCanvas 
-          buildings={buildings} 
-          placementMode={placementMode} 
-          selectedTile={selectedTile} 
-          onTileClick={handleTileClick} 
+        <SettlementMap
+          mapTiles={mapTiles}
+          buildings={buildings}
+          onTileClick={placementMode ? handleTileClick : undefined}
+          onBuildingClick={!placementMode ? handleBuildingClick : undefined}
+          onTileInfoClick={!placementMode ? handleTileInfoClick : undefined}
+          onResourceNodeClick={!placementMode ? handleResourceNodeClick : undefined}
         />
       </Flex>
-      
-      {/* Resource Count and Current Season below the map */}
+
+      {/* Resource Count, Net Gain/Loss & Happiness */}
       <Box bg="gray.200" p={2} textAlign="center">
         <Text fontSize="lg">
-          Resources - Food: {Number(settlementData.food).toFixed(1)} (
-          {settlementData.net_food_rate !== undefined
-            ? settlementData.net_food_rate >= 0
-              ? `(+${Number(settlementData.net_food_rate).toFixed(1)})`
-              : `(${Number(settlementData.net_food_rate).toFixed(1)})`
-            : "(0.0)"}
-          ) | Wood: {Number(settlementData.wood).toFixed(1)} (
-          {settlementData.net_wood_rate !== undefined
-            ? settlementData.net_wood_rate >= 0
-              ? `(+${Number(settlementData.net_wood_rate).toFixed(1)})`
-              : `(${Number(settlementData.net_wood_rate).toFixed(1)})`
-            : "(0.0)"}
-          ) | Stone: {Number(settlementData.stone).toFixed(1)} (
-          {settlementData.net_stone_rate !== undefined
-            ? settlementData.net_stone_rate >= 0
-              ? `(+${Number(settlementData.net_stone_rate).toFixed(1)})`
-              : `(${Number(settlementData.net_stone_rate).toFixed(1)})`
-            : "(0.0)"}
-          )
+          Food: {Number(settlementData.food).toFixed(1)} (
+          {settlementData.net_food_rate >= 0 ? "+" : ""}
+          {Number(settlementData.net_food_rate || 0).toFixed(1)}) | Wood: {Number(settlementData.wood).toFixed(1)} (
+          {settlementData.net_wood_rate >= 0 ? "+" : ""}
+          {Number(settlementData.net_wood_rate || 0).toFixed(1)}) | Stone: {Number(settlementData.stone).toFixed(1)} (
+          {settlementData.net_stone_rate >= 0 ? "+" : ""}
+          {Number(settlementData.net_stone_rate || 0).toFixed(1)}) 
           {settlementData.current_season && <span> | Season: {settlementData.current_season}</span>}
+          {settlementData.popularity_index !== undefined && <span> | Happiness: {settlementData.popularity_index}</span>}
         </Text>
       </Box>
-      
-      {/* Info Panels */}
+
+
+      {/* Scrollable Info Panel */}
       <Box flex="2" bg="gray.200" p={4} overflowY="auto">
-        {/* Building Placement Controls */}
+        {/* Building Placement Panel */}
         <Box mb={4} p={2} bg="white" borderRadius="md">
           <FormControl mb={2}>
             <FormLabel>Select Building Type</FormLabel>
@@ -157,41 +194,101 @@ const SettlementView = () => {
               <option value="farmhouse">Farmhouse</option>
               <option value="lumber_mill">Lumber Mill</option>
               <option value="quarry">Quarry</option>
+              <option value="warehouse">Warehouse</option>
             </Select>
           </FormControl>
-          <Button colorScheme="teal" onClick={() => setPlacementMode(!placementMode)}>
+          <Button colorScheme="teal" onClick={() => setPlacementMode(!placementMode)} mb={2}>
             {placementMode ? "Cancel Placement Mode" : "Enter Placement Mode"}
           </Button>
           {placementError && (
-            <Alert status="error" mt={2}>
-              {placementError}
-            </Alert>
+            <Alert status="error" mt={2}><Text>{placementError}</Text></Alert>
           )}
           {placementMessage && (
-            <Alert status="success" mt={2}>
-              {placementMessage}
-            </Alert>
+            <Alert status="success" mt={2}><Text>{placementMessage}</Text></Alert>
           )}
           {placementMode && (
-            <Text mt={2}>Click directly on the main map to choose a tile for your building.</Text>
+            <Text mt={2}>Click on the map above to select a tile for your building.</Text>
           )}
         </Box>
-        
-        {/* Villager Panel with Inline Assignment */}
+
+        {/* Villager Panel */}
         <Box mb={4} p={2} bg="white" borderRadius="md">
-          <VillagerPanel
-            settlementId={id}
-            availableBuildings={buildings}
-            onAssignmentSuccess={loadSettlementData}
-            currentTick={gameState ? gameState.tick_count : null}
-          />
+        <VillagerPanel
+          settlementId={id}
+          availableBuildings={buildings}
+          onAssignmentSuccess={loadSettlementData}
+          currentTick={gameState ? gameState.tick_count : null}
+          settlementPopularity={settlementData.popularity_index}
+        />
         </Box>
-        
+
         {/* Events Panel */}
         <Box p={2} bg="white" borderRadius="md">
           <EventLog settlementId={id} />
         </Box>
       </Box>
+
+      {/* Building Info Pop-up */}
+      {selectedBuilding && (
+        <Box
+          position="absolute"
+          top={`${buildingTooltipPos.y}px`}
+          left={`${buildingTooltipPos.x}px`}
+          transform="translate(-50%, -110%)"
+          pointerEvents="none"
+          zIndex="20"
+          bg="gray.800"
+          color="white"
+          p="5"
+          borderRadius="md"
+          boxShadow="md"
+          fontSize="sm"
+          maxW="200px"
+          textAlign="center"
+          whiteSpace="normal"
+          wordBreak="break-word"
+        >
+          <strong>{selectedBuilding.building_type.toUpperCase()}</strong>
+          <br />
+          {selectedBuilding.description || "No additional info available."}
+        </Box>
+      )}
+
+      {/* Tile Info / Resource Node Pop-up */}
+      {selectedTileInfo && (
+        <Box
+          position="absolute"
+          top={`${tileTooltipPos.y}px`}
+          left={`${tileTooltipPos.x}px`}
+          transform="translate(-50%, -110%)"
+          pointerEvents="none"
+          zIndex="20"
+          bg="gray.800"
+          color="white"
+          p="2"
+          borderRadius="md"
+          boxShadow="md"
+          fontSize="sm"
+          maxW="200px"
+          textAlign="center"
+          whiteSpace="normal"
+          wordBreak="break-word"
+        >
+          {selectedTileInfo.resource_nodes && selectedTileInfo.resource_nodes.length > 0 ? (
+            <>
+              <strong>{selectedTileInfo.resource_nodes[0].name}</strong>
+              <br />
+              {selectedTileInfo.resource_nodes[0].lore || "No lore available."}
+            </>
+          ) : (
+            <>
+              <strong>{selectedTileInfo.terrain_type.toUpperCase()}</strong>
+              <br />
+              {selectedTileInfo.description || "No description available."}
+            </>
+          )}
+        </Box>
+      )}
     </Flex>
   );
 };

@@ -39,6 +39,14 @@ class BuildingViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Building.objects.all()
     serializer_class = BuildingSerializer
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("Building API Response: %s", response.data)  
+        return response
+
+
 class SettlerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Settler.objects.all()
     serializer_class = SettlerSerializer

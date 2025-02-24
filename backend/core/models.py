@@ -17,31 +17,76 @@ class Settlement(models.Model):
     wood = models.IntegerField(default=50)
     stone = models.IntegerField(default=50)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="settlements")
-    created_at = models.DateTimeField(auto_now_add=True)  # New field for creation time
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name} (Owner: {self.owner.username})"
+        
+    def calculate_net_resource_rates(self, prod_modifier=1.0, cons_modifier=1.0):
+        """
+        Calculates net production rates for each resource based on production buildings and villager consumption.
+        New production building types can be added to PRODUCTION_RATES without needing to change this logic.
+        """
+        from core.config import PRODUCTION_RATES, PRODUCTION_TICK, VILLAGER_CONSUMPTION_RATE, FEEDING_TICK
+        
+        production_totals = {}
 
-# Other models remain unchanged
+        # Consider only buildings that are constructed and have at least one worker
+        production_buildings = self.buildings.filter(is_constructed=True, assigned_settlers__isnull=False).distinct()
+        for building in production_buildings:
+            if building.building_type in PRODUCTION_RATES:
+                worker_count = building.assigned_settlers.count()
+                for resource, rate in PRODUCTION_RATES[building.building_type].items():
+                    # Accumulate production per resource (supports multi-resource production)
+                    production_totals[resource] = production_totals.get(resource, 0) + (rate * prod_modifier * worker_count / PRODUCTION_TICK)
+
+        # Villagers currently consume food only.
+        villager_count = self.settlers.filter(status__in=["idle", "working"]).count()
+        food_consumption = villager_count * (VILLAGER_CONSUMPTION_RATE / FEEDING_TICK * cons_modifier)
+        production_totals["food"] = production_totals.get("food", 0) - food_consumption
+
+        return production_totals
+
+
+class MapTile(models.Model):
+    TERRAIN_CHOICES = (
+        ('grass', 'Grass'),
+        ('forest', 'Forest'),
+        ('bush', 'Bush'),
+        ('stone_deposit', 'Stone Deposit'),
+        ('mountain', 'Mountain'),
+        ('river', 'River'),
+        ('ley_line', 'Magical Ley Line'),
+    )
+    settlement = models.ForeignKey(Settlement, on_delete=models.CASCADE, related_name='map_tiles')
+    coordinate_x = models.IntegerField()
+    coordinate_y = models.IntegerField()
+    terrain_type = models.CharField(max_length=20, choices=TERRAIN_CHOICES)
+
+    def __str__(self):
+        return f"Tile ({self.coordinate_x}, {self.coordinate_y}) - {self.terrain_type}"
+
+
 class Building(models.Model):
     BUILDING_TYPES = (
         ('lumber_mill', 'Lumber Mill'),
         ('quarry', 'Quarry'),
         ('farmhouse', 'Farmhouse'),
         ('house', 'House'),
+        ('warehouse', 'Warehouse'),
     )
     settlement = models.ForeignKey(Settlement, on_delete=models.CASCADE, related_name='buildings')
     building_type = models.CharField(max_length=20, choices=BUILDING_TYPES)
     construction_progress = models.IntegerField(default=0)
     is_constructed = models.BooleanField(default=False)
     villagers_generated = models.IntegerField(default=0)
-    
-    # New fields to store grid coordinates
     coordinate_x = models.IntegerField(null=True, blank=True)
     coordinate_y = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.get_building_type_display()} in {self.settlement.name} at ({self.coordinate_x}, {self.coordinate_y})"
+
 
 class EventLog(models.Model):
     EVENT_TYPES = (
@@ -58,6 +103,7 @@ class EventLog(models.Model):
 
     def __str__(self):
         return f"{self.get_event_type_display()} at {self.timestamp}"
+
 
 class LoreEntry(models.Model):
     title = models.CharField(max_length=200)
@@ -79,8 +125,64 @@ class Settler(models.Model):
     assigned_building = models.ForeignKey(
         "Building", on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_settlers'
     )
-    birth_tick = models.IntegerField(null=True, blank=True)  # tick when villager was born
-    experience = models.IntegerField(default=0)  # accumulative experience
+    housing_assigned = models.ForeignKey(
+        "Building", on_delete=models.SET_NULL, null=True, blank=True, related_name='housed_settlers'
+    )
+    # New field to track resource gathering assignment (optional; can be derived from ResourceNode.gatherer)
+    gathering_resource_node = models.ForeignKey(
+        'ResourceNode',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_gatherer'
+    )
+    birth_tick = models.IntegerField(null=True, blank=True)
+    experience = models.IntegerField(default=0)
 
     def __str__(self):
         return self.name
+
+class MapTile(models.Model):
+    TERRAIN_CHOICES = (
+        ('grass', 'Grass'),
+        ('forest', 'Forest'),
+        ('bush', 'Bush'),
+        ('stone_deposit', 'Stone Deposit'),
+        ('mountain', 'Mountain'),
+        ('river', 'River'),
+        ('ley_line', 'Magical Ley Line'),
+    )
+    settlement = models.ForeignKey(Settlement, on_delete=models.CASCADE, related_name='map_tiles')
+    coordinate_x = models.IntegerField()
+    coordinate_y = models.IntegerField()
+    terrain_type = models.CharField(max_length=20, choices=TERRAIN_CHOICES)
+
+    def __str__(self):
+        return f"Tile ({self.coordinate_x}, {self.coordinate_y}) - {self.terrain_type}"
+
+# New Model for Nature & Resource Nodes
+class ResourceNode(models.Model):
+    RESOURCE_TYPE_CHOICES = (
+        ('food', 'Food'),
+        ('wood', 'Wood'),
+        ('stone', 'Stone'),
+        ('magic', 'Magic'),
+    )
+    name = models.CharField(max_length=100)
+    resource_type = models.CharField(max_length=10, choices=RESOURCE_TYPE_CHOICES)
+    quantity = models.IntegerField(default=100)
+    max_quantity = models.IntegerField(default=100)
+    regen_rate = models.IntegerField(default=5)  # Amount regenerated per tick
+    lore = models.TextField(blank=True)
+    map_tile = models.ForeignKey('MapTile', on_delete=models.CASCADE, related_name='resource_nodes')
+    # New field: track the single villager gathering from this node
+    gatherer = models.OneToOneField(
+        'Settler',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='gathering_resource'
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.resource_type}) at Tile ({self.map_tile.coordinate_x}, {self.map_tile.coordinate_y})"

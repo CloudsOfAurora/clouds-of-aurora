@@ -6,22 +6,22 @@ import time
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
-from django.contrib.auth import authenticate  # no longer using login()
+from django.contrib.auth import authenticate
 
-from core.config import BUILDING_COSTS 
-from .models import GameState, Settlement, Building, Settler, LoreEntry
+from core.config import BUILDING_COSTS, GRID_SIZE, PRODUCTION_RATES, VILLAGER_CONSUMPTION_RATE, SEASON_MODIFIERS, PRODUCTION_TICK, FEEDING_TICK
+from .models import GameState, Settlement, Building, Settler, LoreEntry, MapTile
 from .decorators import jwt_required
 from core.event_logger import log_event
+from django.core.serializers.json import DjangoJSONEncoder
+
+# Import our serializer for map tiles
+from core.api.serializers import MapTileSerializer, BUILDING_DESCRIPTIONS
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-# Global dictionary to store resource snapshots
-previous_resources = {}
-
-
 # ----------------------
-# General Endpoints (unchanged)
+# General Endpoints (unchanged except where noted)
 # ----------------------
 
 def game_state_view(request):
@@ -43,17 +43,16 @@ def settlements_view(request):
     return JsonResponse(data, safe=False)
 
 def buildings_view(request):
-    logger.debug("Received request for buildings")
-    qs = Building.objects.all().values("id", "building_type", "construction_progress", "is_constructed", "settlement_id")
-    data = list(qs)
-    logger.debug(f"Returning buildings: {data}")
-    return JsonResponse(data, safe=False)
+    buildings = Building.objects.all()
+    # Using existing serializer for buildings
+    from core.api.serializers import BuildingSerializer
+    serialized_buildings = BuildingSerializer(buildings, many=True).data
+    return JsonResponse(serialized_buildings, safe=False, json_dumps_params={"indent": 2}, encoder=DjangoJSONEncoder)
 
 def settlers_view(request):
     logger.debug("Received request for settlers")
     try:
-        gs = GameState.objects.get(pk=1)  # Get current tick count
-
+        gs = GameState.objects.get(pk=1)
         qs = Settler.objects.all().values(
             "id",
             "name",
@@ -65,23 +64,14 @@ def settlers_view(request):
             "birth_tick",
             "experience"
         )
-
-        # Convert QuerySet to a list and calculate age
         settlers_data = []
         for settler in qs:
             age = gs.tick_count - settler["birth_tick"] if settler["birth_tick"] is not None else "N/A"
-            settlers_data.append({
-                **settler,
-                "age": age
-            })
-
+            settlers_data.append({**settler, "age": age})
         logger.debug(f"Returning settlers: {settlers_data}")
         return JsonResponse(settlers_data, safe=False)
-
     except GameState.DoesNotExist:
         return JsonResponse({"error": "GameState not found."}, status=500)
-
-
 
 def lore_entries_view(request):
     logger.debug("Received request for lore entries")
@@ -89,10 +79,6 @@ def lore_entries_view(request):
     data = list(qs)
     logger.debug(f"Returning lore entries: {data}")
     return JsonResponse(data, safe=False)
-
-# ----------------------
-# User Account Endpoints
-# ----------------------
 
 @csrf_exempt
 def register(request):
@@ -107,7 +93,7 @@ def register(request):
         email = data.get("email", "")
         logger.debug(f"Registration data received: username={username}, email={email}")
         if not username or not password:
-            logger.error("Username or password missing in registration data")
+            logger.error("Username or password missing")
             return JsonResponse({"error": "Username and password are required."}, status=400)
         if User.objects.filter(username=username).exists():
             logger.error(f"Username '{username}' already exists")
@@ -119,16 +105,10 @@ def register(request):
         logger.exception("Error during registration")
         return JsonResponse({"error": str(e)}, status=500)
 
-# The login endpoint is now handled by Simple JWT's TokenObtainPairView (see URLs)
-
 @jwt_required
 def current_user_view(request):
     logger.debug("Received current_user request")
-    data = {
-        "id": request.user.id,
-        "username": request.user.username,
-        "email": request.user.email,
-    }
+    data = {"id": request.user.id, "username": request.user.username, "email": request.user.email}
     logger.debug(f"Returning authenticated user data: {data}")
     return JsonResponse(data)
 
@@ -155,37 +135,67 @@ def create_settlement(request):
             wood=STARTING_RESOURCES["wood"],
             stone=STARTING_RESOURCES["stone"]
         )
-        # Create starting villagers using config value
         import random
         for _ in range(STARTING_VILLAGERS):
-            name = random.choice(VILLAGER_NAMES)
+            villager_name = random.choice(VILLAGER_NAMES)
             Settler.objects.create(
                 settlement=settlement,
-                name=name,
+                name=villager_name,
                 status="idle",
                 mood="content",
                 hunger=0,
-                birth_tick=None,  # will be set during tick simulation
+                birth_tick=None,
                 experience=0
             )
-        logger.info(f"Settlement '{name}' created successfully for user '{request.user.username}' with {STARTING_VILLAGERS} villagers")
+        
+        # Integrate map generation with resource node creation.
+        # Instead of manually creating tiles here, we call the helper function.
+        from core.map_generation import generate_map_for_settlement
+        generate_map_for_settlement(settlement)
+        
+        logger.info(f"Settlement '{name}' created successfully for user '{request.user.username}'")
         return JsonResponse({"message": "Settlement created successfully.", "settlement_id": settlement.id}, status=201)
     except Exception as e:
         logger.exception("Error during settlement creation")
         return JsonResponse({"error": str(e)}, status=500)
 
-
+@jwt_required
+def settlement_map_view(request, id):
+    logger.debug("Received settlement_map_view request for settlement id: %s", id)
+    try:
+        settlement = Settlement.objects.get(id=id)
+        if settlement.owner_id != request.user.id:
+            logger.warning("User %s attempted to access map for settlement %s not owned by them", request.user.id, id)
+            return JsonResponse({"error": "Not authorized."}, status=403)
+        tiles = settlement.map_tiles.all()
+        from core.api.serializers import MapTileSerializer
+        serialized_tiles = MapTileSerializer(tiles, many=True).data
+        logger.debug("Returning map tiles: %s", serialized_tiles)
+        return JsonResponse(serialized_tiles, safe=False)
+    except Settlement.DoesNotExist:
+        logger.error("Settlement with id %s does not exist", id)
+        return JsonResponse({"error": "Settlement not found."}, status=404)
+    except Exception as e:
+        logger.exception("Error retrieving settlement map: %s", str(e))
+        return JsonResponse({"error": str(e)}, status=500)
 
 @jwt_required
 def settlement_detail_view(request, id):
     logger.debug("Received settlement_detail_view request for id: %s", id)
     try:
+        # Get the latest settlement values directly from the DB.
+        settlement_data = Settlement.objects.filter(id=id).values(
+            'id', 'name', 'food', 'wood', 'stone', 'created_at', 'last_updated'
+        ).first()
+        if not settlement_data:
+            return JsonResponse({"error": "Settlement not found."}, status=404)
+        
+        # Also fetch the full Settlement instance to access relationships.
         settlement = Settlement.objects.get(id=id)
         if settlement.owner_id != request.user.id:
-            logger.warning("User %s attempted to access settlement %s not owned by them", request.user.id, id)
             return JsonResponse({"error": "Not authorized."}, status=403)
         
-        # Retrieve buildings and enrich with assigned settler name (if any)
+        # Fetch buildings and enrich them.
         buildings_qs = settlement.buildings.all().values(
             "id", "building_type", "construction_progress", "is_constructed", "coordinate_x", "coordinate_y"
         )
@@ -194,55 +204,36 @@ def settlement_detail_view(request, id):
             building_obj = settlement.buildings.get(id=b["id"])
             assigned_settlers = building_obj.assigned_settlers.all()
             b["assigned"] = assigned_settlers.first().name if assigned_settlers.exists() else "Unoccupied"
+            b["description"] = BUILDING_DESCRIPTIONS.get(b["building_type"], "No additional info available.")
         
-        # Get current season from GameState
-        from core.models import GameState
+        # Get the current game state.
         gs = GameState.objects.get(pk=1)
         current_season = gs.current_season
-
-        from core.config import PRODUCTION_RATES, VILLAGER_CONSUMPTION_RATE, SEASON_MODIFIERS, PRODUCTION_TICK, FEEDING_TICK
         prod_modifier = SEASON_MODIFIERS.get(current_season, {}).get("production", 1.0)
         cons_modifier = SEASON_MODIFIERS.get(current_season, {}).get("consumption", 1.0)
         
-        farmhouse_count = settlement.buildings.filter(is_constructed=True, building_type="farmhouse").count()
-        lumber_mill_count = settlement.buildings.filter(is_constructed=True, building_type="lumber_mill").count()
-        quarry_count = settlement.buildings.filter(is_constructed=True, building_type="quarry").count()
-        villager_count = settlement.settlers.filter(status__in=["idle", "working"]).count()  # exclude dead
-        
-        #Calculate average production per tick:
-        const_farm_rate = PRODUCTION_RATES.get("farmhouse", {}).get("food", 0) / PRODUCTION_TICK;
-        const_lumber_rate = PRODUCTION_RATES.get("lumber_mill", {}).get("wood", 0) / PRODUCTION_TICK;
-        const_quarry_rate = PRODUCTION_RATES.get("quarry", {}).get("stone", 0) / PRODUCTION_TICK;
-        #Calculate average consumption per tick:
-        const_consumption = VILLAGER_CONSUMPTION_RATE / FEEDING_TICK;
-
-        net_food_rate = (farmhouse_count * const_farm_rate * prod_modifier) - (villager_count * const_consumption * cons_modifier);
-        net_wood_rate = lumber_mill_count * const_lumber_rate * prod_modifier;
-        net_stone_rate = quarry_count * const_quarry_rate * prod_modifier;
+        # Use the Settlement method to calculate net resource rates
+        net_rates = settlement.calculate_net_resource_rates(prod_modifier, cons_modifier)
 
         data = {
-            "id": settlement.id,
-            "name": settlement.name,
-            "food": settlement.food,
-            "wood": settlement.wood,
-            "stone": settlement.stone,
-            "created_at": settlement.created_at,
+            "id": settlement_data["id"],
+            "name": settlement_data["name"],
+            "food": settlement_data["food"],
+            "wood": settlement_data["wood"],
+            "stone": settlement_data["stone"],
+            "created_at": settlement_data["created_at"],
             "buildings": buildings,
-            "net_food_rate": round(net_food_rate, 1),
-            "net_wood_rate": round(net_wood_rate, 1),
-            "net_stone_rate": round(net_stone_rate, 1),
+            "net_food_rate": round(net_rates.get("food", 0), 1),
+            "net_wood_rate": round(net_rates.get("wood", 0), 1),
+            "net_stone_rate": round(net_rates.get("stone", 0), 1),
             "current_season": current_season,
         }
-        logger.debug("Returning settlement detail: %s", data)
         return JsonResponse(data)
     except Settlement.DoesNotExist:
-        logger.error("Settlement with id %s does not exist", id)
         return JsonResponse({"error": "Settlement not found."}, status=404)
     except Exception as e:
         logger.exception("Error retrieving settlement detail: %s", str(e))
         return JsonResponse({"error": str(e)}, status=500)
-
-
 
 
 @csrf_exempt
@@ -258,57 +249,52 @@ def place_building(request):
         building_type = data.get("building_type")
         tile_x = data.get("tile_x")
         tile_y = data.get("tile_y")
-        logger.debug("Data received for building placement: settlement_id=%s, building_type=%s, tile_x=%s, tile_y=%s",
+        logger.debug("Data for building placement: settlement_id=%s, building_type=%s, tile_x=%s, tile_y=%s",
                      settlement_id, building_type, tile_x, tile_y)
-        
         if not settlement_id or not building_type or tile_x is None or tile_y is None:
-            logger.error("Missing settlement_id, building_type, or tile coordinates")
+            logger.error("Missing required fields for building placement")
             return JsonResponse({"error": "Settlement ID, building type, and tile coordinates are required."}, status=400)
-        
-        # Ensure the requested building type is valid
         if building_type not in BUILDING_COSTS:
             logger.error("Invalid building type: %s", building_type)
             return JsonResponse({"error": "Invalid building type."}, status=400)
-        
-        cost = BUILDING_COSTS[building_type]  # Get cost dynamically from config
-
+        cost = BUILDING_COSTS[building_type]
         try:
             settlement = Settlement.objects.get(id=settlement_id, owner=request.user)
         except Settlement.DoesNotExist:
             logger.error("Settlement %s not found for user %s", settlement_id, request.user.id)
             return JsonResponse({"error": "Settlement not found or not owned by user."}, status=404)
-        
-        if not (0 <= tile_x < 10 and 0 <= tile_y < 10):
+        if not (0 <= tile_x < GRID_SIZE and 0 <= tile_y < GRID_SIZE):
             logger.error("Tile coordinates out of bounds: (%s, %s)", tile_x, tile_y)
             return JsonResponse({"error": "Tile coordinates must be between 0 and 9."}, status=400)
-        
         if settlement.buildings.filter(coordinate_x=tile_x, coordinate_y=tile_y).exists():
-            logger.error("Tile (%s, %s) is already occupied in settlement %s", tile_x, tile_y, settlement_id)
+            logger.error("Tile (%s, %s) already occupied in settlement %s", tile_x, tile_y, settlement_id)
             return JsonResponse({"error": "Tile is already occupied."}, status=400)
-        
-        # Check if settlement has enough resources
+        tile = settlement.map_tiles.filter(coordinate_x=tile_x, coordinate_y=tile_y).first()
+        if not tile:
+            logger.error("Map tile (%s, %s) not found", tile_x, tile_y)
+            return JsonResponse({"error": "Map tile not found."}, status=404)
+        if tile.terrain_type == "river":
+            logger.error("Attempt to build on river tile (%s, %s)", tile_x, tile_y)
+            return JsonResponse({"error": "Cannot build on river tile."}, status=400)
         if settlement.wood < cost["wood"] or settlement.stone < cost["stone"]:
-            logger.error("Insufficient resources in settlement %s: required wood=%s, stone=%s; available wood=%s, stone=%s",
-                         settlement_id, cost["wood"], cost["stone"], settlement.wood, settlement.stone)
+            logger.error("Insufficient resources in settlement %s", settlement_id)
             return JsonResponse({"error": "Insufficient resources."}, status=400)
-        
-        # Deduct resources and save changes
         settlement.wood -= cost["wood"]
         settlement.stone -= cost["stone"]
         settlement.save()
-        
-        # Create the new building
+        # For testing/strategy, mark production buildings as constructed immediately.
+        is_constructed = True if building_type in ["farmhouse", "lumber_mill", "quarry"] else False
         building = Building.objects.create(
             settlement=settlement,
             building_type=building_type,
             construction_progress=0,
-            is_constructed=False,
+            is_constructed=is_constructed,
             villagers_generated=0,
             coordinate_x=tile_x,
             coordinate_y=tile_y,
         )
         log_event(settlement, "building_placed", f"{building.building_type} placed at ({tile_x}, {tile_y}).")
-        logger.info("Building '%s' created in settlement %s at (%s, %s) (building id: %s)",
+        logger.info("Building '%s' created in settlement %s at (%s, %s) (id: %s)",
                     building_type, settlement_id, tile_x, tile_y, building.id)
         return JsonResponse({"message": "Building placed successfully.", "building_id": building.id}, status=201)
     except Exception as e:
@@ -327,25 +313,21 @@ def assign_villager(request):
         settlement_id = data.get("settlement_id")
         building_id = data.get("building_id")
         settler_id = data.get("settler_id", None)
-        logger.debug("Assign villager data: settlement_id=%s, building_id=%s, settler_id=%s",
+        logger.debug("Assign villager: settlement_id=%s, building_id=%s, settler_id=%s",
                      settlement_id, building_id, settler_id)
-        
         if not settlement_id or not building_id:
-            logger.error("Missing settlement_id or building_id in request")
+            logger.error("Missing settlement_id or building_id")
             return JsonResponse({"error": "Settlement ID and building ID are required."}, status=400)
-        
         try:
             settlement = Settlement.objects.get(id=settlement_id, owner=request.user)
         except Settlement.DoesNotExist:
             logger.error("Settlement %s not found for user %s", settlement_id, request.user.id)
             return JsonResponse({"error": "Settlement not found or not owned by user."}, status=404)
-        
         try:
             building = settlement.buildings.get(id=building_id)
         except Building.DoesNotExist:
             logger.error("Building %s not found in settlement %s", building_id, settlement_id)
             return JsonResponse({"error": "Building not found in the settlement."}, status=404)
-        
         if settler_id:
             try:
                 settler = settlement.settlers.get(id=settler_id)
@@ -358,26 +340,81 @@ def assign_villager(request):
                 logger.error("No idle villagers available in settlement %s", settlement_id)
                 return JsonResponse({"error": "No idle villagers available."}, status=400)
             settler = idle_settlers.first()
-        
-        # Allow reassignment regardless of current status
         settler.assigned_building = building
         settler.status = "working"
         settler.save()
-        
         logger.info("Settler %s assigned to building %s in settlement %s", settler.id, building_id, settlement_id)
-        log_event(settlement, "villager_assigned", f"Villager {settler.name} assigned to building {building.building_type}.")
+        log_event(settlement, "villager_assigned", f"Villager {settler.name} assigned to {building.building_type}.")
         return JsonResponse({"message": "Villager assigned successfully.", "settler_id": settler.id}, status=200)
     except Exception as e:
         logger.exception("Error during villager assignment: %s", str(e))
         return JsonResponse({"error": str(e)}, status=500)
 
+@csrf_exempt
+@jwt_required
+def gather_resource(request):
+    """
+    Endpoint to assign a villager to gather from a resource node.
+    Expects: settlement_id, resource_node_id.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST method is allowed."}, status=405)
+    try:
+        data = json.loads(request.body)
+        settlement_id = data.get("settlement_id")
+        resource_node_id = data.get("resource_node_id")
+        if not settlement_id or not resource_node_id:
+            return JsonResponse({"error": "Settlement ID and resource node ID are required."}, status=400)
+        
+        # Verify settlement ownership.
+        try:
+            settlement = Settlement.objects.get(id=settlement_id, owner=request.user)
+        except Settlement.DoesNotExist:
+            return JsonResponse({"error": "Settlement not found or not owned by user."}, status=404)
+        
+        # Get the resource node.
+        from core.models import ResourceNode, Settler
+        try:
+            node = ResourceNode.objects.get(id=resource_node_id, map_tile__settlement=settlement)
+        except ResourceNode.DoesNotExist:
+            return JsonResponse({"error": "Resource node not found in settlement."}, status=404)
+        
+        # If node already has a gatherer, return error.
+        if node.gatherer:
+            return JsonResponse({"error": "Resource node is already being gathered."}, status=400)
+        
+        # Select a random idle villager.
+        idle_settlers = settlement.settlers.filter(status="idle")
+        if not idle_settlers.exists():
+            return JsonResponse({"error": "No idle villagers available."}, status=400)
+        villager = idle_settlers.order_by('?').first()
+        
+        # Assign the villager to the resource node.
+        node.gatherer = villager
+        node.save()
+        villager.gathering_resource_node = node
+        villager.status = f"gathering_{node.resource_type}"
+        villager.save()
+        
+        # Log the event.
+        log_event(settlement, "villager_assigned", f"{villager.name} started gathering from {node.name}.")
+        
+        return JsonResponse({
+            "message": f"{villager.name} started gathering from {node.name}.",
+            "villager_id": villager.id,
+            "resource_node_id": node.id,
+        }, status=200)
+    except Exception as e:
+        logger.exception("Error during resource gathering: %s", str(e))
+        return JsonResponse({"error": str(e)}, status=500)
+
 @jwt_required
 def settlement_events_view(request, id):
-    logger.debug("Received settlement_events_view request for settlement id: %s", id)
+    logger.debug("Received settlement_events_view for settlement id: %s", id)
     try:
         settlement = Settlement.objects.get(id=id)
         if settlement.owner_id != request.user.id:
-            logger.warning("User %s attempted to access events for settlement %s not owned by them", request.user.id, id)
+            logger.warning("User %s attempted access to events for settlement %s", request.user.id, id)
             return JsonResponse({"error": "Not authorized."}, status=403)
         events = settlement.events.order_by("-timestamp").all()[:10]
         events_data = list(events.values("id", "event_type", "description", "timestamp"))

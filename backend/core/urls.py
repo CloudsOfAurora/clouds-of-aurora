@@ -14,6 +14,7 @@ from core.views import (
     settlement_events_view,
     place_building,
     assign_villager,
+    settlement_map_view,
 )
 
 urlpatterns = [
@@ -28,6 +29,7 @@ urlpatterns = [
     path('settlement/create/', create_settlement, name='create_settlement'),
     path('current_user/', current_user_view, name='current_user'),
     path('settlement/view/<int:id>/', settlement_detail_view, name='settlement_detail'),
+    path('settlement/<int:id>/map/', settlement_map_view, name='settlement_map'),
     path('building/place/', place_building, name='place_building'),
     path('villager/assign/', assign_villager, name='assign_villager'),
     path('settlement/<int:id>/events/', settlement_events_view, name='settlement_events'),

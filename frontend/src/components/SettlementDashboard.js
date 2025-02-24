@@ -1,8 +1,9 @@
 // src/components/SettlementDashboard.js
+
 import React, { useEffect, useState } from "react";
 import { Box, Text, Heading, Spinner, Alert, AlertIcon, Button } from "@chakra-ui/react";
 import { fetchCurrentUser, fetchSettlements } from "../api";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
 import SettlementForm from "./SettlementForm";
 
 const UserDashboard = () => {
@@ -10,11 +11,16 @@ const UserDashboard = () => {
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate(); // Initialize navigation
 
   const loadData = async () => {
     try {
       setLoading(true);
       const userData = await fetchCurrentUser();
+      if (!userData || userData.error) {
+        navigate("/welcome"); // Redirect to welcome page if user data is invalid
+        return;
+      }
       setUser(userData);
       const allSettlements = await fetchSettlements();
       const mySettlements = allSettlements.filter(
@@ -24,7 +30,7 @@ const UserDashboard = () => {
       setError(null);
     } catch (err) {
       console.error(err);
-      setError("Failed to load user dashboard data");
+      navigate("/welcome"); // Redirect guests to WelcomePage
     } finally {
       setLoading(false);
     }
@@ -42,15 +48,8 @@ const UserDashboard = () => {
     );
   }
 
-  if (error) {
-    return (
-      <Box p="4">
-        <Alert status="error">
-          <AlertIcon />
-          {error}
-        </Alert>
-      </Box>
-    );
+  if (!user) {
+    return null; // Avoid rendering if user is still null
   }
 
   return (
