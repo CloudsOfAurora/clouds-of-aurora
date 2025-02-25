@@ -1,3 +1,4 @@
+// src/components/SettlementView.js
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Box,
@@ -9,6 +10,7 @@ import {
   FormControl,
   FormLabel,
   Alert,
+  Collapse,
 } from "@chakra-ui/react";
 import { useParams } from "react-router-dom";
 import SettlementMap from "./SettlementMap";
@@ -21,6 +23,15 @@ import {
 } from "../api";
 import VillagerPanel from "./VillagerPanel";
 import EventLog from "./EventLog";
+
+// Local constant with building options including cost details
+const BUILDING_OPTIONS = {
+  house: { name: "House", cost: { wood: 10, stone: 10 } },
+  farmhouse: { name: "Farmhouse", cost: { wood: 10, stone: 10 } },
+  lumber_mill: { name: "Lumber Mill", cost: { wood: 10, stone: 0 } },
+  quarry: { name: "Quarry", cost: { wood: 0, stone: 10 } },
+  warehouse: { name: "Warehouse", cost: { wood: 100, stone: 100 } },
+};
 
 const SettlementView = () => {
   const { id } = useParams();
@@ -42,6 +53,7 @@ const SettlementView = () => {
   const [selectedBuildingType, setSelectedBuildingType] = useState("");
   const [placementMessage, setPlacementMessage] = useState("");
   const [placementError, setPlacementError] = useState("");
+  const [buildingPlacementExpanded, setBuildingPlacementExpanded] = useState(false);
 
   // Create a ref for VillagerPanel.
   const villagerPanelRef = useRef(null);
@@ -181,8 +193,13 @@ const SettlementView = () => {
               console.debug("[SettlementView] Toggle assignment response:", response.message);
               loadMapTiles();
               loadSettlementData();
-              if (villagerPanelRef.current && typeof villagerPanelRef.current.refreshVillagers === "function") {
-                console.debug("[SettlementView] Refreshing villager panel after toggle assignment.");
+              if (
+                villagerPanelRef.current &&
+                typeof villagerPanelRef.current.refreshVillagers === "function"
+              ) {
+                console.debug(
+                  "[SettlementView] Refreshing villager panel after toggle assignment."
+                );
                 villagerPanelRef.current.refreshVillagers();
               }
             })
@@ -331,14 +348,11 @@ const SettlementView = () => {
         <Text fontSize="lg">
           Food: {Number(settlementData.food).toFixed(1)} (
           {settlementData.net_food_rate >= 0 ? "+" : ""}
-          {Number(settlementData.net_food_rate || 0).toFixed(1)}) | Wood:{" "}
-          {Number(settlementData.wood).toFixed(1)} (
+          {Number(settlementData.net_food_rate || 0).toFixed(1)}) | Wood: {Number(settlementData.wood).toFixed(1)} (
           {settlementData.net_wood_rate >= 0 ? "+" : ""}
-          {Number(settlementData.net_wood_rate || 0).toFixed(1)}) | Stone:{" "}
-          {Number(settlementData.stone).toFixed(1)} (
+          {Number(settlementData.net_wood_rate || 0).toFixed(1)}) | Stone: {Number(settlementData.stone).toFixed(1)} (
           {settlementData.net_stone_rate >= 0 ? "+" : ""}
-          {Number(settlementData.net_stone_rate || 0).toFixed(1)}) | Magic:{" "}
-          {Number(settlementData.magic).toFixed(1)} (
+          {Number(settlementData.net_stone_rate || 0).toFixed(1)}) | Magic: {Number(settlementData.magic).toFixed(1)} (
           {settlementData.net_magic_rate >= 0 ? "+" : ""}
           {Number(settlementData.net_magic_rate || 0).toFixed(1)})
           {settlementData.current_season && (
@@ -354,42 +368,54 @@ const SettlementView = () => {
       <Box flex="2" bg="gray.200" p={4} overflowY="auto">
         {/* Building Placement Panel */}
         <Box mb={4} p={2} bg="white" borderRadius="md">
-          <FormControl mb={2}>
-            <FormLabel>Select Building Type</FormLabel>
-            <Select
-              placeholder="Select building type"
-              value={selectedBuildingType}
-              onChange={(e) => setSelectedBuildingType(e.target.value)}
-            >
-              <option value="house">House</option>
-              <option value="farmhouse">Farmhouse</option>
-              <option value="lumber_mill">Lumber Mill</option>
-              <option value="quarry">Quarry</option>
-              <option value="warehouse">Warehouse</option>
-            </Select>
-          </FormControl>
-          <Button
-            colorScheme="teal"
-            onClick={() => setPlacementMode(!placementMode)}
+          <Box
+            as="button"
+            width="100%"
+            textAlign="left"
+            fontWeight="bold"
+            onClick={() => setBuildingPlacementExpanded(!buildingPlacementExpanded)}
             mb={2}
           >
-            {placementMode ? "Cancel Placement Mode" : "Enter Placement Mode"}
-          </Button>
-          {placementError && (
-            <Alert status="error" mt={2}>
-              <Text>{placementError}</Text>
-            </Alert>
-          )}
-          {placementMessage && (
-            <Alert status="success" mt={2}>
-              <Text>{placementMessage}</Text>
-            </Alert>
-          )}
-          {placementMode && (
-            <Text mt={2}>
-              Click on the map above to select a tile for your building.
-            </Text>
-          )}
+            Place a building {buildingPlacementExpanded ? "▲" : "▼"}
+          </Box>
+          <Collapse in={buildingPlacementExpanded} animateOpacity>
+            <FormControl mb={2}>
+              <FormLabel>Select Building Type</FormLabel>
+              <Select
+                placeholder="Select building type"
+                value={selectedBuildingType}
+                onChange={(e) => setSelectedBuildingType(e.target.value)}
+              >
+                {Object.entries(BUILDING_OPTIONS).map(([key, option]) => (
+                  <option key={key} value={key}>
+                    {option.name} (Wood: {option.cost.wood}, Stone: {option.cost.stone})
+                  </option>
+                ))}
+              </Select>
+            </FormControl>
+            <Button
+              colorScheme="teal"
+              onClick={() => setPlacementMode(!placementMode)}
+              mb={2}
+            >
+              {placementMode ? "Cancel Placement Mode" : "Enter Placement Mode"}
+            </Button>
+            {placementError && (
+              <Alert status="error" mt={2}>
+                <Text>{placementError}</Text>
+              </Alert>
+            )}
+            {placementMessage && (
+              <Alert status="success" mt={2}>
+                <Text>{placementMessage}</Text>
+              </Alert>
+            )}
+            {placementMode && (
+              <Text mt={2}>
+                Click on the map above to select a tile for your building.
+              </Text>
+            )}
+          </Collapse>
         </Box>
 
         {/* Villager Panel */}

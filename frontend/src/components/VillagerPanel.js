@@ -1,3 +1,4 @@
+// src/components/VillagerPanel.js
 import React, {
   useEffect,
   useState,
@@ -63,6 +64,8 @@ const VillagerPanel = forwardRef(
 
     useEffect(() => {
       loadVillagers();
+      const interval = setInterval(loadVillagers, 5000);
+      return () => clearInterval(interval);
     }, [loadVillagers]);
 
     const toggleExpand = (villagerId) => {
@@ -106,13 +109,18 @@ const VillagerPanel = forwardRef(
 
     // Derive assignment label based on nested objects.
     const getAssignmentInfo = (villager) => {
+      let status = "Idle";
       if (villager.gathering_resource_node && villager.gathering_resource_node.name) {
-        return `Gathering from ${villager.gathering_resource_node.name}`;
+        status = `Gathering from ${villager.gathering_resource_node.name}`;
       } else if (villager.assigned_building && villager.assigned_building.building_type) {
-        return `Working in ${villager.assigned_building.building_type}`;
+        status = `Working in ${villager.assigned_building.building_type}`;
       }
-      return "Idle";
+      if (!villager.housing_assigned) {
+        status += " (homeless)";
+      }
+      return status;
     };
+    
 
     if (loading) {
       return (
@@ -159,39 +167,14 @@ const VillagerPanel = forwardRef(
                     </Text>
                   </Flex>
                   <Text fontSize="xs">Status: {assignmentInfo}</Text>
+                  <Text fontSize="xs">Hunger: {villager.hunger}</Text>
+                  <Text fontSize="xs">Experience: {villager.experience}</Text>
                   <Text fontSize="xs">Age: {computeAge(villager.birth_tick)}</Text>
                   {settlementPopularity === 1 && (
                     <Text fontSize="xs" color="green.500">
                       Happy
                     </Text>
                   )}
-                  <Collapse in={expanded[villager.id]} animateOpacity>
-                    <Box mt="1">
-                      <Text fontSize="xs">Reassign:</Text>
-                      <Select
-                        placeholder="Select building"
-                        size="xs"
-                        value={assignmentSelections[villager.id] || ""}
-                        onChange={(e) =>
-                          handleSelectChange(villager.id, e.target.value)
-                        }
-                      >
-                        {availableBuildings.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.building_type} (ID: {b.id})
-                          </option>
-                        ))}
-                      </Select>
-                      <Button
-                        size="xs"
-                        mt="1"
-                        colorScheme="teal"
-                        onClick={() => handleAssign(villager.id)}
-                      >
-                        Assign
-                      </Button>
-                    </Box>
-                  </Collapse>
                 </Box>
               );
             })}

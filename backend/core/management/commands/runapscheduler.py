@@ -29,6 +29,7 @@ class Command(BaseCommand):
             self.stdout.write("Tick simulation stopped.")
 
     def tick(self, gs):
+        # Update game state tick and season.
         with transaction.atomic():
             gs.tick_count += 1
             if gs.tick_count % SEASON_CHANGE_TICKS == 0:
@@ -45,7 +46,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Tick {gs.tick_count} - Season: {gs.current_season} - {timezone.now()}")
         logger.info(f"Tick {gs.tick_count} - Season: {gs.current_season}")
 
-        # Process construction for buildings
+        # Process construction for buildings.
         with transaction.atomic():
             buildings = Building.objects.filter(is_constructed=False)
             for building in buildings:
@@ -57,7 +58,18 @@ class Command(BaseCommand):
                     building.is_constructed = True
                     self.stdout.write(f"{building} construction completed.")
                     logger.info(f"{building} construction completed.")
+                    if building.building_type == "house":
+                        from core.population import reassign_homeless_settlers
+                        reassign_homeless_settlers(building.settlement)
                 building.save()
+
+        # Additional periodic check for housing assignment.
+        with transaction.atomic():
+            from core.models import Settlement
+            from core.population import reassign_homeless_settlers
+            settlements = Settlement.objects.all()
+            for settlement in settlements:
+                reassign_homeless_settlers(settlement)
 
         # Process production, feeding, and villager lifecycle in order.
         if gs.tick_count % PRODUCTION_TICK == 0:
@@ -65,6 +77,7 @@ class Command(BaseCommand):
             self.process_settler_feeding(gs)
             self.process_villager_lifecycle(gs)
             self.process_resource_gathering(gs)
+
 
     def process_production(self, gs):  
         from core.config import PRODUCTION_RATES, PRODUCTION_TICK, RESOURCE_CAP, WAREHOUSE_BONUS
@@ -95,11 +108,11 @@ class Command(BaseCommand):
                 warehouse_count = settlement.buildings.filter(is_constructed=True, building_type="warehouse").count()
                 effective_cap = RESOURCE_CAP + (warehouse_count * WAREHOUSE_BONUS)
                 if building.building_type == "lumber_mill":
-                    settlement.wood = Least(F('wood') + production, Value(effective_cap))
+                    settlement.wood = min(settlement.wood + production, effective_cap)
                 elif building.building_type == "quarry":
-                    settlement.stone = Least(F('stone') + production, Value(effective_cap))
+                    settlement.stone = min(settlement.stone + production, effective_cap)
                 elif building.building_type == "farmhouse":
-                    settlement.food = Least(F('food') + production, Value(effective_cap))
+                    settlement.food = min(settlement.food + production, effective_cap)
                 settlement.save()
                 logger.debug(
                     f"{building}: Produced {production} (workers: {worker_count}, modifier: {prod_modifier}, rate: {rate}), Effective Cap: {effective_cap}"

@@ -79,8 +79,7 @@ def calculate_popularity_index(settlement):
     # 3. Housing Factor: count only settlers that are marked as housed.
     houses = settlement.buildings.filter(building_type='house', is_constructed=True)
     housing_capacity = houses.count() * HOUSE_CAPACITY
-    # Assuming settlers have a boolean field 'housing_assigned'
-    housed_settlers = settlement.settlers.filter(housing_assigned=True).count()
+    housed_settlers = settlement.settlers.filter(housing_assigned__isnull=False).count()
     if housing_capacity == 0:
         housing_factor = 0  # No houses means heavy penalty.
     else:
@@ -214,16 +213,13 @@ def reassign_homeless_settlers(settlement):
     """
     Reassigns homeless settlers (those with housing_assigned == None) to houses
     in the settlement using the fewest occupants approach.
-    For each homeless settler, find the constructed house (of type 'house') with fewer than HOUSE_CAPACITY occupants.
     """
     houses = list(settlement.buildings.filter(building_type='house', is_constructed=True))
     if not houses:
         return
 
-    # For each homeless settler, assign them to the house with the fewest occupants (that isn't full)
     homeless_settlers = settlement.settlers.filter(housing_assigned__isnull=True)
     for settler in homeless_settlers:
-        # Find the house with the smallest number of occupants and available capacity
         candidate_house = None
         candidate_count = None
         for house in houses:
@@ -235,3 +231,5 @@ def reassign_homeless_settlers(settlement):
         if candidate_house:
             settler.housing_assigned = candidate_house
             settler.save()
+            from core.event_logger import log_event
+            log_event(settlement, "villager_assigned", f"{settler.name} moved into House")

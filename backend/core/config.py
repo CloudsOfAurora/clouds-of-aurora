@@ -195,9 +195,9 @@ TILE_SPRITES = {
 # --- Starting Values for New Settlements ---
 STARTING_RESOURCES = {
     "food": 50,
-    "wood": 0,
-    "stone": 0,
-    "magic": 0,
+    "wood": 50,
+    "stone": 50,
+    "magic": 50,
 }
 
 # --- Resource Cap ---
@@ -259,7 +259,7 @@ MAX_VILLAGER_AGE = 99999999999
 EXPERIENCE_GAIN_PER_TICK = 1
 REPRODUCTION_RATE = 0.1
 REPRODUCTION_FOOD_THRESHOLD = 100
-HOUSE_CAPACITY = 1
+HOUSE_CAPACITY = 4
 
 # --- Unified Game Object Definitions ---
 GAME_OBJECTS = {

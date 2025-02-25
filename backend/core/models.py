@@ -1,3 +1,4 @@
+# core/models.py
 from django.db import models
 from django.contrib.auth.models import User  # Import the built-in User model
 
@@ -20,6 +21,8 @@ class Settlement(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="settlements")
     created_at = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
+    happy_duration = models.IntegerField(default=0)
+    happiness_boost = models.FloatField(default=1.0)
 
     def __str__(self):
         return f"{self.name} (Owner: {self.owner.username})"

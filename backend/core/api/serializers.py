@@ -4,25 +4,22 @@ from core.models import Settlement, Building, Settler, LoreEntry, MapTile, GameS
 from core.config import BUILDING_DESCRIPTIONS, TILE_DESCRIPTIONS, TILE_COLORS, TILE_SPRITES, SEASON_MODIFIERS
 from core.population import calculate_popularity_index 
 
-# core/api/serializers.py
-from rest_framework import serializers
-from core.models import Settlement, Building, Settler, LoreEntry, MapTile, GameState
-from core.config import BUILDING_DESCRIPTIONS, TILE_DESCRIPTIONS, TILE_COLORS, TILE_SPRITES, SEASON_MODIFIERS
-
 class BuildingSerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField()
 
     def get_description(self, obj):
-        # If this building is a house, list its occupants.
         if obj.building_type == "house":
             occupants = obj.housed_settlers.all()
             if occupants.exists():
-                names = ", ".join([occ.name for occ in occupants])
-                return f"Wooden House: {names} live(s) here."
+                if occupants.count() == 1:
+                    return f"House: {occupants.first().name} lives here."
+                else:
+                    names = ", ".join([occ.name for occ in occupants])
+                    return f"House: {names} live here."
             else:
-                return "Wooden House: Unoccupied."
-        # Otherwise, return the standard description.
+                return "House: Empty."
         return BUILDING_DESCRIPTIONS.get(obj.building_type, "No additional info available.")
+
 
     class Meta:
         model = Building
@@ -41,13 +38,14 @@ class BuildingSerializer(serializers.ModelSerializer):
 
 class SettlerSerializer(serializers.ModelSerializer):
     assigned_building = BuildingSerializer(read_only=True)
+    housing_assigned = BuildingSerializer(read_only=True)  # NEW: Include housing assignment info
     gathering_resource_node = serializers.SerializerMethodField()
 
     class Meta:
         model = Settler
         fields = [
             'id', 'name', 'status', 'mood', 'hunger',
-            'assigned_building', 'gathering_resource_node',
+            'assigned_building', 'housing_assigned', 'gathering_resource_node',
             'settlement_id', 'birth_tick', 'experience'
         ]
 
@@ -61,6 +59,7 @@ class SettlerSerializer(serializers.ModelSerializer):
                 'max_quantity': obj.gathering_resource_node.max_quantity,
             }
         return None
+
 
 class SettlementSerializer(serializers.ModelSerializer):
     buildings = BuildingSerializer(many=True, read_only=True)
@@ -94,7 +93,6 @@ class SettlementSerializer(serializers.ModelSerializer):
         ]
 
     def _get_modifiers(self):
-        # Retrieve the current game state and corresponding modifiers.
         gs = GameState.objects.get(pk=1)
         current_season = gs.current_season
         prod_modifier = SEASON_MODIFIERS.get(current_season, {}).get("production", 1.0)
@@ -124,9 +122,9 @@ class SettlementSerializer(serializers.ModelSerializer):
         return current_season
     
     def get_popularity_index(self, obj):
-        # Compute the popularity index via our population module
         return round(calculate_popularity_index(obj), 2)
-    
+
+
 class MapTileSerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField()
     color = serializers.SerializerMethodField()
@@ -145,10 +143,12 @@ class MapTileSerializer(serializers.ModelSerializer):
         model = MapTile
         fields = ['coordinate_x', 'coordinate_y', 'terrain_type', 'description', 'color', 'sprite']
 
+
 class LoreEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = LoreEntry
         fields = ['id', 'title', 'description', 'event_date']
+
 
 from core.models import Settlement, Building, Settler, LoreEntry, MapTile, GameState, ResourceNode
 
@@ -159,6 +159,7 @@ class ResourceNodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResourceNode
         fields = ['id', 'name', 'resource_type', 'quantity', 'max_quantity', 'lore', 'gatherer_id']
+
 
 class MapTileSerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField()

@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from "react";
+// src/components/SettlementMap.js
+import React, { useEffect, useRef, useState } from "react";
 
 const DEFAULT_GRID_SIZE = 10;
 const DEFAULT_CANVAS_WIDTH = 300;
@@ -21,6 +22,7 @@ const SettlementMap = ({
 }) => {
   const canvasRef = useRef(null);
   const clickTimer = useRef(null);
+  const [isDoubleClick, setIsDoubleClick] = useState(false);
 
   // Helper: Calculate tile info from the event.
   const getTileInfo = (e) => {
@@ -82,8 +84,11 @@ const SettlementMap = ({
   // Handle single click with debounce.
   const handleSingleClick = (e) => {
     clickTimer.current = setTimeout(() => {
-      handleEvent(e, "single");
-    }, 200);
+      if (!isDoubleClick) {
+        handleEvent(e, "single");
+      }
+      setIsDoubleClick(false);
+    }, 250);
   };
 
   // Handle double click: cancel the single-click timer.
@@ -92,6 +97,7 @@ const SettlementMap = ({
       clearTimeout(clickTimer.current);
       clickTimer.current = null;
     }
+    setIsDoubleClick(true);
     handleEvent(e, "double");
   };
 
@@ -161,15 +167,16 @@ const SettlementMap = ({
       height={height}
       style={{
         border: "1px solid #000",
-        cursor: (onTileClick ||
+        cursor:
+          onTileClick ||
           onBuildingClick ||
           onTileInfoClick ||
           onResourceNodeClick ||
           onResourceNodeDoubleClick ||
           onRightClick ||
-          onTileInteraction)
-          ? "pointer"
-          : "default",
+          onTileInteraction
+            ? "pointer"
+            : "default",
       }}
       onClick={handleSingleClick}
       onDoubleClick={handleDoubleClick}
