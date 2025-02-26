@@ -1,4 +1,3 @@
-// src/components/SettlementView.js
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Box,
@@ -12,7 +11,7 @@ import {
   Alert,
   Collapse,
 } from "@chakra-ui/react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import SettlementMap from "./SettlementMap";
 import {
   fetchSettlement,
@@ -24,7 +23,6 @@ import {
 import VillagerPanel from "./VillagerPanel";
 import EventLog from "./EventLog";
 
-// Local constant with building options including cost details
 const BUILDING_OPTIONS = {
   house: { name: "House", cost: { wood: 100, stone: 50 } },
   farmhouse: { name: "Farmhouse", cost: { wood: 30, stone: 10 } },
@@ -35,6 +33,7 @@ const BUILDING_OPTIONS = {
 
 const SettlementView = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [settlementData, setSettlementData] = useState(null);
   const [buildings, setBuildings] = useState([]);
   const [mapTiles, setMapTiles] = useState([]);
@@ -42,7 +41,7 @@ const SettlementView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Popup state.
+  // Popup states.
   const [quickPopupInfo, setQuickPopupInfo] = useState(null);
   const [quickPopupPos, setQuickPopupPos] = useState({ x: 0, y: 0 });
   const [detailedPopupInfo, setDetailedPopupInfo] = useState(null);
@@ -55,44 +54,38 @@ const SettlementView = () => {
   const [placementError, setPlacementError] = useState("");
   const [buildingPlacementExpanded, setBuildingPlacementExpanded] = useState(false);
 
-  // Create a ref for VillagerPanel.
+  // Reference for VillagerPanel.
   const villagerPanelRef = useRef(null);
-  const autoRefreshInterval = useRef(null);
 
-  // Load settlement data.
   const loadSettlementData = useCallback(async () => {
     try {
-      console.debug("[SettlementView] Fetching settlement data for ID:", id);
       const data = await fetchSettlement(id);
-      console.debug("[SettlementView] Settlement data fetched:", data);
       setSettlementData(data);
       setBuildings(data.buildings || []);
       setError(null);
     } catch (err) {
-      console.error("[SettlementView] Error fetching settlement details:", err);
+      console.error("Error fetching settlement details:", err);
       setError("Error fetching settlement details.");
     }
   }, [id]);
 
   const loadGameState = useCallback(async () => {
     try {
-      console.debug("[SettlementView] Fetching game state.");
       const data = await fetchGameState();
-      console.debug("[SettlementView] Game state:", data);
       setGameState(data);
     } catch (err) {
-      console.error("[SettlementView] Error fetching game state:", err);
+      console.error("Error fetching game state:", err);
     }
   }, []);
 
   const loadMapTiles = useCallback(async () => {
     try {
-      console.debug("[SettlementView] Fetching map tiles for settlement ID:", id);
       const tiles = await fetchMapTiles(id);
-      console.debug("[SettlementView] Map tiles fetched:", tiles);
       setMapTiles(tiles);
+      return tiles;
     } catch (err) {
-      console.error("[SettlementView] Error fetching map tiles:", err);
+      console.error("Error fetching map tiles:", err);
+      return [];
     }
   }, [id]);
 
@@ -104,111 +97,132 @@ const SettlementView = () => {
       setLoading(false);
     };
     loadData();
-    autoRefreshInterval.current = setInterval(() => {
-      if (!placementMode) {
-        loadSettlementData();
-      }
+    const interval = setInterval(() => {
+      if (!placementMode) loadSettlementData();
       loadGameState();
       loadMapTiles();
     }, 1000);
-    return () => clearInterval(autoRefreshInterval.current);
+    return () => clearInterval(interval);
   }, [id, placementMode, loadSettlementData, loadGameState, loadMapTiles]);
 
-  const handleTileClick = useCallback(
-    async ({ tile_x, tile_y }) => {
-      if (!placementMode) return;
-      if (selectedBuildingType) {
-        try {
-          console.debug(
-            "[SettlementView] Placing building of type",
-            selectedBuildingType,
-            "at tile (",
-            tile_x,
-            tile_y,
-            ")"
-          );
-          const payload = {
-            settlement_id: id,
-            building_type: selectedBuildingType,
-            tile_x,
-            tile_y,
-          };
-          const response = await placeBuilding(payload);
-          console.debug(
-            "[SettlementView] Building placed with response:",
-            response
-          );
-          setPlacementMessage(`Building placed successfully! ID: ${response.building_id}`);
-          setPlacementError("");
-          await loadSettlementData();
-          setPlacementMode(false);
-        } catch (err) {
-          const errorMsg = err.response?.data?.error || "Error placing building.";
-          setPlacementError(errorMsg);
-          setPlacementMessage("");
-          if (errorMsg.includes("Insufficient resources")) {
-            setPlacementMode(false);
-          }
-        }
-      }
-    },
-    [placementMode, selectedBuildingType, id, loadSettlementData]
-  );
+  // Auto-dismiss quick popup after 5 seconds.
+  useEffect(() => {
+    if (quickPopupInfo) {
+      const timer = setTimeout(() => setQuickPopupInfo(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [quickPopupInfo]);
 
+  // Auto-dismiss detailed popup after 5 seconds.
+  useEffect(() => {
+    if (detailedPopupInfo) {
+      const timer = setTimeout(() => setDetailedPopupInfo(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [detailedPopupInfo]);
+
+  // Helper: show updated info popup using the latest tile data.
+  const showUpdatedInfo = (tile, pos) => {
+    if (tile.resource_nodes && tile.resource_nodes.length > 0) {
+      setQuickPopupInfo({ type: "resource_node", tile });
+    } else {
+      const building = buildings.find(
+        (b) =>
+          b.coordinate_x === tile.coordinate_x &&
+          b.coordinate_y === tile.coordinate_y
+      );
+      if (building) {
+        setQuickPopupInfo({ type: "building", building });
+      } else {
+        setQuickPopupInfo({ type: "tile", tile });
+      }
+    }
+    setQuickPopupPos(pos);
+  };
+
+  // Handler for building placement.
+  const handleTilePlacement = async (tile) => {
+    if (!placementMode || !selectedBuildingType) return;
+    try {
+      const payload = {
+        settlement_id: id,
+        building_type: selectedBuildingType,
+        tile_x: tile.coordinate_x,
+        tile_y: tile.coordinate_y,
+      };
+      const response = await placeBuilding(payload);
+      setPlacementMessage(`Building placed successfully! ID: ${response.building_id}`);
+      setPlacementError("");
+      await loadSettlementData();
+      setPlacementMode(false);
+      setBuildingPlacementExpanded(false);
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || "Error placing building.";
+      setPlacementError(errorMsg);
+      setPlacementMessage("");
+      if (errorMsg.includes("Insufficient resources")) {
+        setPlacementMode(false);
+      }
+    }
+  };
+
+  // Unified tile interaction callback.
   const handleTileInteraction = useCallback(
-    ({ type, tile, pos }) => {
-      console.debug("[SettlementView] Tile interaction:", type, tile, pos);
+    async ({ type, tile, pos }) => {
       if (placementMode && type === "single") {
-        handleTileClick({
-          tile_x: tile.coordinate_x,
-          tile_y: tile.coordinate_y,
-        });
+        // In placement mode, single click places building.
+        handleTilePlacement(tile);
         return;
       }
       if (type === "single") {
-        if (tile.resource_nodes && tile.resource_nodes.length > 0) {
-          console.debug("[SettlementView] Single click on resource node tile:", tile);
-          setQuickPopupInfo({ type: "resource_node", tile });
-        } else {
-          const building = buildings.find(
-            (b) =>
-              b.coordinate_x === tile.coordinate_x &&
-              b.coordinate_y === tile.coordinate_y
-          );
-          if (building) {
-            console.debug("[SettlementView] Single click on building tile:", building);
-            setQuickPopupInfo({ type: "building", building });
+        // Single click: simply show the info popup using current state.
+        if (tile) {
+          if (tile.resource_nodes && tile.resource_nodes.length > 0) {
+            setQuickPopupInfo({ type: "resource_node", tile });
           } else {
-            setQuickPopupInfo({ type: "tile", tile });
+            const building = buildings.find(
+              (b) =>
+                b.coordinate_x === tile.coordinate_x &&
+                b.coordinate_y === tile.coordinate_y
+            );
+            if (building) {
+              setQuickPopupInfo({ type: "building", building });
+            } else {
+              setQuickPopupInfo({ type: "tile", tile });
+            }
           }
+          setQuickPopupPos(pos);
         }
-        setQuickPopupPos(pos);
       } else if (type === "double") {
+        // Double click: perform assignment toggle then re-fetch updated tile info.
         if (tile.resource_nodes && tile.resource_nodes.length > 0) {
           const node = tile.resource_nodes[0];
-          console.debug("[SettlementView] Double click on resource node:", node);
-          toggleAssignment({
-            settlement_id: id,
-            object_type: "resource_node",
-            object_id: node.id,
-          })
-            .then((response) => {
-              console.debug("[SettlementView] Toggle assignment response:", response.message);
-              loadMapTiles();
-              loadSettlementData();
-              if (
-                villagerPanelRef.current &&
-                typeof villagerPanelRef.current.refreshVillagers === "function"
-              ) {
-                console.debug(
-                  "[SettlementView] Refreshing villager panel after toggle assignment."
-                );
-                villagerPanelRef.current.refreshVillagers();
-              }
-            })
-            .catch((err) =>
-              console.error(err.response?.data?.error || "Error toggling resource assignment.")
+          try {
+            await toggleAssignment({
+              settlement_id: id,
+              object_type: "resource_node",
+              object_id: node.id,
+            });
+            // Fetch updated tile info.
+            const updatedTiles = await loadMapTiles();
+            await loadSettlementData();
+            if (
+              villagerPanelRef.current &&
+              typeof villagerPanelRef.current.refreshVillagers === "function"
+            ) {
+              villagerPanelRef.current.refreshVillagers();
+            }
+            const updatedTile = updatedTiles.find(
+              (t) => t.coordinate_x === tile.coordinate_x && t.coordinate_y === tile.coordinate_y
             );
+            if (updatedTile) {
+              showUpdatedInfo(updatedTile, pos);
+            }
+          } catch (err) {
+            console.error(
+              err.response?.data?.error || "Error toggling resource assignment."
+            );
+          }
         } else {
           const building = buildings.find(
             (b) =>
@@ -216,22 +230,23 @@ const SettlementView = () => {
               b.coordinate_y === tile.coordinate_y
           );
           if (building) {
-            console.debug("[SettlementView] Double click on building:", building);
-            toggleAssignment({
-              settlement_id: id,
-              object_type: "building",
-              object_id: building.id,
-            })
-              .then((response) => {
-                console.debug("[SettlementView] Toggle assignment response:", response.message);
-                loadSettlementData();
-              })
-              .catch((err) =>
-                console.error(err.response?.data?.error || "Error toggling building assignment.")
+            try {
+              await toggleAssignment({
+                settlement_id: id,
+                object_type: "building",
+                object_id: building.id,
+              });
+              await loadSettlementData();
+              showUpdatedInfo(tile, pos);
+            } catch (err) {
+              console.error(
+                err.response?.data?.error || "Error toggling building assignment."
               );
+            }
           }
         }
       } else if (type === "right") {
+        // Right click: show detailed popup.
         if (tile.resource_nodes && tile.resource_nodes.length > 0) {
           setDetailedPopupInfo({ type: "resource_node", tile });
         } else {
@@ -245,78 +260,15 @@ const SettlementView = () => {
         setDetailedPopupPos(pos);
       }
     },
-    [placementMode, buildings, id, loadMapTiles, loadSettlementData, handleTileClick]
+    [
+      placementMode,
+      id,
+      buildings,
+      loadMapTiles,
+      loadSettlementData,
+      villagerPanelRef,
+    ]
   );
-
-  const renderQuickPopupContent = () => {
-    if (!quickPopupInfo) return null;
-    if (quickPopupInfo.type === "resource_node") {
-      const node = quickPopupInfo.tile.resource_nodes[0];
-      const status = node.gatherer_id ? "Gathering" : "Idle";
-      return (
-        <>
-          <strong>{node.name}</strong>
-          <br />
-          Status: {status}
-          <br />
-          Remaining: {node.quantity} / {node.max_quantity}
-        </>
-      );
-    } else if (quickPopupInfo.type === "building") {
-      const building = quickPopupInfo.building;
-      return (
-        <>
-          <strong>{building ? building.building_type.toUpperCase() : "BUILDING"}</strong>
-          <br />
-          Assigned: {building && building.assigned ? building.assigned : "Unoccupied"}
-        </>
-      );
-    } else if (quickPopupInfo.type === "tile") {
-      return (
-        <>
-          <strong>{quickPopupInfo.tile.terrain_type ? quickPopupInfo.tile.terrain_type.toUpperCase() : "TILE"}</strong>
-        </>
-      );
-    }
-    return null;
-  };
-
-  const renderDetailedPopupContent = () => {
-    if (!detailedPopupInfo) return null;
-    const { type, tile } = detailedPopupInfo;
-    if (type === "resource_node") {
-      const node = tile.resource_nodes[0];
-      return (
-        <>
-          <strong>{node.resource_type.toUpperCase()}</strong>
-          <br />
-          {node.lore}
-        </>
-      );
-    } else if (type === "building") {
-      const building = buildings.find(
-        (b) =>
-          b.coordinate_x === tile.coordinate_x &&
-          b.coordinate_y === tile.coordinate_y
-      );
-      return (
-        <>
-          <strong>{building ? building.building_type.toUpperCase() : "BUILDING"}</strong>
-          <br />
-          {building ? building.description : ""}
-        </>
-      );
-    } else if (type === "tile") {
-      return (
-        <>
-          <strong>{tile.terrain_type ? tile.terrain_type.toUpperCase() : "TILE"}</strong>
-          <br />
-          {tile.description || "No description available."}
-        </>
-      );
-    }
-    return null;
-  };
 
   if (loading || !settlementData) {
     return (
@@ -369,7 +321,19 @@ const SettlementView = () => {
 
       {/* Scrollable Info Panel */}
       <Box flex="2" bg="gray.200" p={4} overflowY="auto">
-        {/* Building Placement Panel */}
+        {/* Villager Panel (on top) */}
+        <Box mb={4} p={2} bg="white" borderRadius="md">
+          <VillagerPanel
+            ref={villagerPanelRef}
+            settlementId={id}
+            availableBuildings={buildings}
+            onAssignmentSuccess={loadSettlementData}
+            currentTick={gameState ? gameState.tick_count : null}
+            settlementPopularity={settlementData.popularity_index}
+          />
+        </Box>
+
+        {/* Building Placement Panel (below) */}
         <Box mb={4} p={2} bg="white" borderRadius="md">
           <Box
             as="button"
@@ -421,18 +385,6 @@ const SettlementView = () => {
           </Collapse>
         </Box>
 
-        {/* Villager Panel */}
-        <Box mb={4} p={2} bg="white" borderRadius="md">
-          <VillagerPanel
-            ref={villagerPanelRef}
-            settlementId={id}
-            availableBuildings={buildings}
-            onAssignmentSuccess={loadSettlementData}
-            currentTick={gameState ? gameState.tick_count : null}
-            settlementPopularity={settlementData.popularity_index}
-          />
-        </Box>
-
         {/* Events Panel */}
         <Box p={2} bg="white" borderRadius="md">
           <EventLog settlementId={id} />
@@ -460,7 +412,27 @@ const SettlementView = () => {
           wordBreak="break-word"
           onMouseLeave={() => setQuickPopupInfo(null)}
         >
-          {renderQuickPopupContent()}
+          {quickPopupInfo.type === "resource_node" && (
+            <>
+              <strong>{quickPopupInfo.tile.resource_nodes[0].name}</strong>
+              <br />
+              Status: {quickPopupInfo.tile.resource_nodes[0].gatherer_id ? "Gathering" : "Idle"}
+              <br />
+              Remaining: {quickPopupInfo.tile.resource_nodes[0].quantity} / {quickPopupInfo.tile.resource_nodes[0].max_quantity}
+            </>
+          )}
+          {quickPopupInfo.type === "building" && (
+            <>
+              <strong>{quickPopupInfo.building.building_type.toUpperCase()}</strong>
+              <br />
+              Assigned: {quickPopupInfo.building.assigned ? quickPopupInfo.building.assigned : "Unoccupied"}
+            </>
+          )}
+          {quickPopupInfo.type === "tile" && (
+            <>
+              <strong>{quickPopupInfo.tile.terrain_type ? quickPopupInfo.tile.terrain_type.toUpperCase() : "TILE"}</strong>
+            </>
+          )}
         </Box>
       )}
 
@@ -484,7 +456,37 @@ const SettlementView = () => {
           wordBreak="break-word"
           onMouseLeave={() => setDetailedPopupInfo(null)}
         >
-          {renderDetailedPopupContent()}
+          {detailedPopupInfo.type === "resource_node" && (
+            <>
+              <strong>{detailedPopupInfo.tile.resource_nodes[0].resource_type.toUpperCase()}</strong>
+              <br />
+              {detailedPopupInfo.tile.resource_nodes[0].lore}
+            </>
+          )}
+          {detailedPopupInfo.type === "building" && (
+            <>
+              <strong>
+                {buildings.find(
+                  (b) =>
+                    b.coordinate_x === detailedPopupInfo.tile.coordinate_x &&
+                    b.coordinate_y === detailedPopupInfo.tile.coordinate_y
+                )?.building_type.toUpperCase() || "BUILDING"}
+              </strong>
+              <br />
+              {buildings.find(
+                (b) =>
+                  b.coordinate_x === detailedPopupInfo.tile.coordinate_x &&
+                  b.coordinate_y === detailedPopupInfo.tile.coordinate_y
+              )?.description || ""}
+            </>
+          )}
+          {detailedPopupInfo.type === "tile" && (
+            <>
+              <strong>{detailedPopupInfo.tile.terrain_type ? detailedPopupInfo.tile.terrain_type.toUpperCase() : "TILE"}</strong>
+              <br />
+              {detailedPopupInfo.tile.description || "No description available."}
+            </>
+          )}
         </Box>
       )}
     </Flex>

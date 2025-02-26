@@ -2,11 +2,13 @@
 import React, { useState } from "react";
 import { Box, Button, Input, FormControl, FormLabel, Alert, AlertIcon } from "@chakra-ui/react";
 import { createSettlement } from "../api";  // Use the token‑enabled API function
+import { useNavigate } from "react-router-dom";
 
 const SettlementForm = () => {
   const [name, setName] = useState("");
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   const handleCreateSettlement = async (e) => {
     e.preventDefault();
@@ -15,6 +17,7 @@ const SettlementForm = () => {
       const data = await createSettlement(name);
       setMessage(data.message + " (ID: " + data.settlement_id + ")");
       setError(null);
+      setTimeout(() => navigate("/"), 1000);
     } catch (err) {
       setError(err.response?.data?.error || "Failed to create settlement.");
       setMessage(null);

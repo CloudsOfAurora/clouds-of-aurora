@@ -8,11 +8,11 @@ import SettlementForm from "./components/SettlementForm";
 import UserDashboard from "./components/SettlementDashboard";
 import SettlementView from "./components/SettlementView";
 import WelcomePage from "./components/WelcomePage";
-import { AuthProvider } from "./context/AuthContext"; // Ensure correct import
+import { AuthProvider } from "./context/AuthContext"; 
 
 function App() {
   return (
-    <AuthProvider> {/* ✅ Wrap the entire App with AuthProvider */}
+    <AuthProvider> 
       <Router>
         <Header />
         <Box p="4">

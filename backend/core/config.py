@@ -239,13 +239,7 @@ BUILDING_DESCRIPTIONS = {
 # --- Villager Settings ---
 STARTING_VILLAGERS = 2
 VILLAGER_NAMES = [
-    "Ava", "Ben", "Cleo", "Elin", "Finn", "Gwen", "Hale",
-    "Iris", "Jude", "Kai", "Lena", "Milo", "Nia", "Otis", "Pia",
-    "Quinn", "Rex", "Sage", "Tess", "Uma", "Vito", "Wren", "Xavi",
-    "Yara", "Zane", "Arlo", "Bree", "Cian", "Dara", "Ewan", "Faye",
-    "Gio", "Hope", "Ines", "Joss", "Kian", "Lior", "Mira", "Nico",
-    "Oren", "Pax", "Rina", "Seth", "Tova", "Uri", "Vera", "Wynn",
-    "Yves", "Zora"
+    "Alice", "Bob"
 ]
 VILLAGER_AGING_INTERVAL = 1
 MAX_VILLAGER_AGE = 500

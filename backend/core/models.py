@@ -27,13 +27,19 @@ class Settlement(models.Model):
     def __str__(self):
         return f"{self.name} (Owner: {self.owner.username})"
         
+    
     def calculate_net_resource_rates(self, prod_modifier=1.0, cons_modifier=1.0):
         """
-        Calculates net production rates for each resource based on production buildings and villager consumption.
-        New production building types can be added to PRODUCTION_RATES without needing to change this logic.
+        Calculates net production rates for each resource based on production buildings,
+        villager consumption, and currently gathered resource nodes.
         """
-        from core.config import PRODUCTION_RATES, PRODUCTION_TICK, VILLAGER_CONSUMPTION_RATE, FEEDING_TICK
-        
+        from core.config import (
+            PRODUCTION_RATES,
+            PRODUCTION_TICK,
+            VILLAGER_CONSUMPTION_RATE,
+            FEEDING_TICK,
+            GATHER_RATES,  # Added import here
+        )
         production_totals = {}
         production_buildings = self.buildings.filter(is_constructed=True, assigned_settlers__isnull=False).distinct()
         for building in production_buildings:
@@ -44,6 +50,12 @@ class Settlement(models.Model):
         villager_count = self.settlers.filter(status__in=["idle", "working"]).count()
         food_consumption = villager_count * (VILLAGER_CONSUMPTION_RATE / FEEDING_TICK * cons_modifier)
         production_totals["food"] = production_totals.get("food", 0) - food_consumption
+
+        # Add gathered resource node production.
+        for tile in self.map_tiles.all():
+            for node in tile.resource_nodes.all():
+                if node.gatherer:
+                    production_totals[node.resource_type] = production_totals.get(node.resource_type, 0) + GATHER_RATES.get(node.resource_type, 1)
         return production_totals
 
 
