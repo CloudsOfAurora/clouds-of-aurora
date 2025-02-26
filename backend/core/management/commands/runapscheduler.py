@@ -7,9 +7,8 @@ from django.utils import timezone
 
 from core.models import Building, Settlement, Settler, GameState, ResourceNode
 from core.config import SEASONS, SEASON_CHANGE_TICKS, SEASON_MODIFIERS, PRODUCTION_TICK
-
-# Import our new population module functions
 from core.population import apply_happiness_effects, process_villager_recruitment
+from core.event_logger import log_event 
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +166,11 @@ class Command(BaseCommand):
                 else:
                     settler.hunger += consumption
                     settler.mood = "hungry"
+                    if settler.hunger >= 100:
+                            settler.status = "dead"
+                            settler.mood = "sick"
+                            log_event(settlement, "villager_dead",
+                                      f"Villager {settler.name} died of starvation (hunger {settler.hunger}).")
                 settlement.save()
                 settler.save()
                 total_food_consumption += consumption

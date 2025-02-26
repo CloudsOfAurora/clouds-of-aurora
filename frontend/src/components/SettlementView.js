@@ -26,11 +26,11 @@ import EventLog from "./EventLog";
 
 // Local constant with building options including cost details
 const BUILDING_OPTIONS = {
-  house: { name: "House", cost: { wood: 10, stone: 10 } },
-  farmhouse: { name: "Farmhouse", cost: { wood: 10, stone: 10 } },
-  lumber_mill: { name: "Lumber Mill", cost: { wood: 10, stone: 0 } },
-  quarry: { name: "Quarry", cost: { wood: 0, stone: 10 } },
-  warehouse: { name: "Warehouse", cost: { wood: 100, stone: 100 } },
+  house: { name: "House", cost: { wood: 100, stone: 50 } },
+  farmhouse: { name: "Farmhouse", cost: { wood: 30, stone: 10 } },
+  lumber_mill: { name: "Lumber Mill", cost: { wood: 30, stone: 0 } },
+  quarry: { name: "Quarry", cost: { wood: 50, stone: 10 } },
+  warehouse: { name: "Warehouse", cost: { wood: 300, stone: 300 } },
 };
 
 const SettlementView = () => {
@@ -143,9 +143,12 @@ const SettlementView = () => {
           await loadSettlementData();
           setPlacementMode(false);
         } catch (err) {
-          console.error("[SettlementView] Error placing building:", err);
-          setPlacementError(err.response?.data?.error || "Error placing building.");
+          const errorMsg = err.response?.data?.error || "Error placing building.";
+          setPlacementError(errorMsg);
           setPlacementMessage("");
+          if (errorMsg.includes("Insufficient resources")) {
+            setPlacementMode(false);
+          }
         }
       }
     },

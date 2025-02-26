@@ -261,7 +261,8 @@ def settlement_detail_view(request, id):
         logger.exception("Error retrieving settlement detail: %s", str(e))
         return JsonResponse({"error": str(e)}, status=500)
 
-
+@csrf_exempt
+@jwt_required
 def place_building(request):
     logger.debug("Received place_building request")
     if request.method != "POST":

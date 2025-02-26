@@ -18,7 +18,6 @@ axiosInstance.interceptors.request.use(
     const token = getAccessToken();
     if (token) {
       config.headers["Authorization"] = "Bearer " + token;
-      console.log("Added Authorization header:", config.headers["Authorization"]);
     } else {
       console.log("No access token found in localStorage.");
     }
@@ -28,6 +27,11 @@ axiosInstance.interceptors.request.use(
 );
 
 // API functions
+
+export const deleteSettlement = async (id) => {
+  const response = await axiosInstance.delete(`/settlement/${id}/delete/`);
+  return response.data;
+};
 
 export const fetchGameState = async () => {
   const response = await axiosInstance.get("/game-state/");
@@ -68,7 +72,6 @@ export const login = async (username, password) => {
   const response = await axios.post(`${API_BASE_URL}/token/`, { username, password });
   localStorage.setItem("accessToken", response.data.access);
   localStorage.setItem("refreshToken", response.data.refresh);
-  console.log("Token obtained:", response.data.access);
   return response.data;
 };
 

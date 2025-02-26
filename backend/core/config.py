@@ -7,7 +7,7 @@ TILE_WIDTH = 16
 
 # --- General Simulation Settings ---
 TICK_INTERVAL_SECONDS = 5
-SEASON_CHANGE_TICKS = 120
+SEASON_CHANGE_TICKS = 20
 
 # --- Resource Node Definitions ---
 # Each resource node type is finite and has properties for spawning and regeneration.
@@ -15,7 +15,7 @@ RESOURCE_NODES = {
     "skyberry_bush": {
         "name": "Skyberry",
         "resource_type": "food",
-        "probability": 0.03,           
+        "probability": 0.07,           
         "initial_quantity": 50,
         "max_quantity": 50,
         "regen_rate": 2,               
@@ -25,7 +25,7 @@ RESOURCE_NODES = {
     "skyfish_pool": {
         "name": "Skyfish Pool",
         "resource_type": "food",
-        "probability": 0.005,
+        "probability": 0.01,
         "initial_quantity": 50,
         "max_quantity": 50,
         "regen_rate": 2,
@@ -35,7 +35,7 @@ RESOURCE_NODES = {
     "cloudroot_fungus": {
         "name": "Cloudroot Fungus",
         "resource_type": "food",
-        "probability": 0.005,
+        "probability": 0.0,
         "initial_quantity": 45,
         "max_quantity": 45,
         "regen_rate": 2,
@@ -45,7 +45,7 @@ RESOURCE_NODES = {
     "windroot_cluster": {
         "name": "Windroot",
         "resource_type": "wood",
-        "probability": 0.03,
+        "probability": 0.07,
         "initial_quantity": 40,
         "max_quantity": 40,
         "regen_rate": 1,
@@ -55,7 +55,7 @@ RESOURCE_NODES = {
     "driftwood_tangle": {
         "name": "Driftwood",
         "resource_type": "wood",
-        "probability": 0.005,
+        "probability": 0.0,
         "initial_quantity": 40,
         "max_quantity": 40,
         "regen_rate": 1,
@@ -65,7 +65,7 @@ RESOURCE_NODES = {
     "stormvine_clump": {
         "name": "Stormvine",
         "resource_type": "wood",
-        "probability": 0.005,
+        "probability": 0.01,
         "initial_quantity": 30,
         "max_quantity": 30,
         "regen_rate": 1,
@@ -75,7 +75,7 @@ RESOURCE_NODES = {
     "drifting_boulders": {
         "name": "Drifting Boulders",
         "resource_type": "stone",
-        "probability": 0.03,
+        "probability": 0.05,
         "initial_quantity": 60,
         "max_quantity": 60,
         "regen_rate": 1,
@@ -85,7 +85,7 @@ RESOURCE_NODES = {
         "sunglazed_plateau": {
         "name": "Plateau",
         "resource_type": "stone",
-        "probability": 0.005,
+        "probability": 0.01,
         "initial_quantity": 40,
         "max_quantity": 40,
         "regen_rate": 1,
@@ -95,7 +95,7 @@ RESOURCE_NODES = {
     "hollowed_cliffside": {
         "name": "Cliffside",
         "resource_type": "stone",
-        "probability": 0.005,
+        "probability": 0.009,
         "initial_quantity": 55,
         "max_quantity": 55,
         "regen_rate": 1,
@@ -105,7 +105,7 @@ RESOURCE_NODES = {
     "aetheric_geyser": {
         "name": "Aetheric Geyser",
         "resource_type": "magic",
-        "probability": 0.005,
+        "probability": 0.0,
         "initial_quantity": 30,
         "max_quantity": 30,
         "regen_rate": 1,
@@ -115,7 +115,7 @@ RESOURCE_NODES = {
     "ley_crystal_formation": {
         "name": "Ley Crystal Formation",
         "resource_type": "magic",
-        "probability": 0.01,
+        "probability": 0.001,
         "initial_quantity": 30,
         "max_quantity": 30,
         "regen_rate": 1,
@@ -135,7 +135,7 @@ RESOURCE_NODES = {
     "echoing_stones": {
         "name": "Echoing Stones",
         "resource_type": "magic",
-        "probability": 0.001,
+        "probability": 0.0,
         "initial_quantity": 25,
         "max_quantity": 25,
         "regen_rate": 1,
@@ -165,16 +165,16 @@ GATHER_RATES = {
 TERRAIN_PROBABILITIES = {
     'grass': 0.5,
     'forest': 0.5,
-    'mountain': 0.1,
-    'river': 0.1,
+    'mountain': 0.2,
+    'river': 0.2,
 }
 
 # --- Tile Appearance & Descriptions ---
 TILE_DESCRIPTIONS = {
-    'grass': "A fertile patch of grass, ideal for farming or building.",
-    'forest': "A dense forest rich in wood.",
+    'grass': "Fertile patch of grass.",
+    'forest': "Dense forest rich in wood.",
     'mountain': "Rugged, rocky terrain.",
-    'river': "A flowing river – you cannot build on this tile.",
+    'river': "Flowing river.",
 }
 
 # These colors are used for now; in future, sprites can replace them.
@@ -195,9 +195,9 @@ TILE_SPRITES = {
 # --- Starting Values for New Settlements ---
 STARTING_RESOURCES = {
     "food": 50,
-    "wood": 50,
-    "stone": 50,
-    "magic": 50,
+    "wood": 10,
+    "stone": 10,
+    "magic": 0,
 }
 
 # --- Resource Cap ---
@@ -207,46 +207,39 @@ RESOURCE_CAP = 500
 # --- Seasons and Seasonal Modifiers ---
 SEASONS = ["Spring", "Summer", "Autumn", "Winter"]
 SEASON_MODIFIERS = {
-    "Spring": {"production": 1.0, "consumption": 1.0, "construction_speed_multiplier": 1.0},
-    "Summer": {"production": 1.0, "consumption": 1.0, "construction_speed_multiplier": 1.0},
-    "Autumn": {"production": 1.0, "consumption": 1.0, "construction_speed_multiplier": 1.0},
-    "Winter": {"production": 1.0, "consumption": 1.0, "construction_speed_multiplier": 1.0},
+    "Spring": {"production": 1.5, "consumption": 1.0, "construction_speed_multiplier": 1.0},
+    "Summer": {"production": 1.5, "consumption": 1.0, "construction_speed_multiplier": 1.0},
+    "Autumn": {"production": 1.0, "consumption": 1.0, "construction_speed_multiplier": 0.5},
+    "Winter": {"production": 0.5, "consumption": 1.5, "construction_speed_multiplier": 0.2},
 }
 
 # --- Production and Consumption ---
 PRODUCTION_RATES = {
-    "lumber_mill": {"wood": 10},
-    "quarry": {"stone": 10},
-    "farmhouse": {"food": 10},
+    "lumber_mill": {"wood": 2},
+    "quarry": {"stone": 2},
+    "farmhouse": {"food": 5},
 }
 VILLAGER_CONSUMPTION_RATE = 1
 PRODUCTION_TICK = 1
 FEEDING_TICK = 1
 
-# --- Building Costs & Descriptions ---
-BUILDING_COSTS = {
-    "house": {"wood": 10, "stone": 10},
-    "farmhouse": {"wood": 10, "stone": 10},
-    "lumber_mill": {"wood": 10, "stone": 0},
-    "quarry": {"wood": 0, "stone": 10},
-    "warehouse": {"wood": 100, "stone": 100},
-}
+
 
 # --- Warehouse Bonus ---
 WAREHOUSE_BONUS = 200
 
 BUILDING_DESCRIPTIONS = {
-    "lumber_mill": "Processes logs into usable wood. +10 wood per production tick.",
-    "quarry": "Extracts stone from the ground. +10 stone per production tick.",
-    "farmhouse": "Produces food by farming the land. +10 food per production tick.",
-    "house": "Provides shelter for up to 4 villagers.",
+    "lumber_mill": "Processes logs into usable wood.",
+    "quarry": "Extracts stone from the ground.",
+    "farmhouse": "Produces food by farming the land.",
+    "house": "Provides shelter for your villagers.",
     "warehouse": "Increases resource storage cap by 200 for each warehouse built.",
 }
 
 # --- Villager Settings ---
 STARTING_VILLAGERS = 2
 VILLAGER_NAMES = [
-    "Ava", "Ben", "Cleo", "Dax", "Elin", "Finn", "Gwen", "Hale",
+    "Ava", "Ben", "Cleo", "Elin", "Finn", "Gwen", "Hale",
     "Iris", "Jude", "Kai", "Lena", "Milo", "Nia", "Otis", "Pia",
     "Quinn", "Rex", "Sage", "Tess", "Uma", "Vito", "Wren", "Xavi",
     "Yara", "Zane", "Arlo", "Bree", "Cian", "Dara", "Ewan", "Faye",
@@ -255,42 +248,51 @@ VILLAGER_NAMES = [
     "Yves", "Zora"
 ]
 VILLAGER_AGING_INTERVAL = 1
-MAX_VILLAGER_AGE = 99999999999
+MAX_VILLAGER_AGE = 500
 EXPERIENCE_GAIN_PER_TICK = 1
 REPRODUCTION_RATE = 0.1
-REPRODUCTION_FOOD_THRESHOLD = 100
+REPRODUCTION_FOOD_THRESHOLD = 300
 HOUSE_CAPACITY = 4
+
+# --- Building Costs & Descriptions ---
+BUILDING_COSTS = {
+    "house": {"wood": 100, "stone": 50},
+    "farmhouse": {"wood": 30, "stone": 10},
+    "lumber_mill": {"wood": 30, "stone": 10},
+    "quarry": {"wood": 50, "stone": 0},
+    "warehouse": {"wood": 300, "stone": 300},
+}
 
 # --- Unified Game Object Definitions ---
 GAME_OBJECTS = {
     "buildings": {
         "house": {
             "name": "House",
-            "cost": {"wood": 10, "stone": 10},
+            "cost": {"wood": 100, "stone": 50},
             "description": "Provides shelter for up to 4 villagers.",
             "icon": "H",
         },
         "farmhouse": {
             "name": "Farmhouse",
-            "cost": {"wood": 10, "stone": 10},
-            "description": "Produces food by farming the land. +10 food per production tick.",
+            "cost": {"wood": 30, "stone": 10},
+            "description": "Produces food by farming the land.",
             "icon": "F",
         },
         "lumber_mill": {
             "name": "Lumber Mill",
-            "cost": {"wood": 10, "stone": 0},
-            "description": "Processes logs into usable wood. +10 wood per production tick.",
+            "cost": {"wood": 30, "stone": 10},
+            "description": "Processes logs into usable wood.",
             "icon": "L",
         },
         "quarry": {
             "name": "Quarry",
-            "cost": {"wood": 0, "stone": 10},
-            "description": "Extracts stone from the ground. +10 stone per production tick.",
+            "cost": {"wood": 50, "stone": 0},
+            "description": "Extracts stone from the ground.",
             "icon": "Q",
         },
         "warehouse": {
             "name": "Warehouse",
-            "cost": {"wood": 100, "stone": 100},
+            "cost": {"wood": 200, "stone": 200},
             "description": "Increases resource storage cap by 200 per warehouse built.",
             "icon": "W",
         },

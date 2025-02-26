@@ -88,7 +88,7 @@ const SettlementMap = ({
         handleEvent(e, "single");
       }
       setIsDoubleClick(false);
-    }, 250);
+    }, 150);
   };
 
   // Handle double click: cancel the single-click timer.

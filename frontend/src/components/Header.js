@@ -1,13 +1,12 @@
 // src/components/Header.js
-
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Flex, Button, Text } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Header = () => {
     const { user, logoutUser } = useAuth();
-    const navigate = useNavigate(); // Moved to top, outside conditional blocks
+    const navigate = useNavigate();
 
     const handleLogout = () => {
         logoutUser();
@@ -27,9 +26,7 @@ const Header = () => {
                     <Button as={Link} to="/dashboard" colorScheme="teal" mr="2">
                         Dashboard
                     </Button>
-                    <Button as={Link} to="/settlement" colorScheme="teal" mr="2">
-                        Create Settlement
-                    </Button>
+                    {/* Removed Create Settlement button from header */}
                     <Button onClick={handleLogout} colorScheme="red" mr="2">
                         Log Out
                     </Button>

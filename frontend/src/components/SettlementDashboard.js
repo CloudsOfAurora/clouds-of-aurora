@@ -1,24 +1,23 @@
 // src/components/SettlementDashboard.js
-
 import React, { useEffect, useState } from "react";
 import { Box, Text, Heading, Spinner, Alert, AlertIcon, Button } from "@chakra-ui/react";
-import { fetchCurrentUser, fetchSettlements } from "../api";
-import { Link, useNavigate } from "react-router-dom"; // Import useNavigate
+import { fetchCurrentUser, fetchSettlements, deleteSettlement } from "../api";
+import { Link, useNavigate } from "react-router-dom";
 import SettlementForm from "./SettlementForm";
 
-const UserDashboard = () => {
+const SettlementDashboard = () => {
   const [user, setUser] = useState(null);
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const navigate = useNavigate(); // Initialize navigation
+  const navigate = useNavigate();
 
   const loadData = async () => {
     try {
       setLoading(true);
       const userData = await fetchCurrentUser();
       if (!userData || userData.error) {
-        navigate("/welcome"); // Redirect to welcome page if user data is invalid
+        navigate("/welcome");
         return;
       }
       setUser(userData);
@@ -30,9 +29,18 @@ const UserDashboard = () => {
       setError(null);
     } catch (err) {
       console.error(err);
-      navigate("/welcome"); // Redirect guests to WelcomePage
+      navigate("/welcome");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteSettlement(id);
+      loadData();
+    } catch (err) {
+      alert(err.response?.data?.error || "Error deleting settlement.");
     }
   };
 
@@ -49,7 +57,7 @@ const UserDashboard = () => {
   }
 
   if (!user) {
-    return null; // Avoid rendering if user is still null
+    return null;
   }
 
   return (
@@ -60,7 +68,7 @@ const UserDashboard = () => {
       {settlements.length === 0 ? (
         <>
           <Text>You don't have any settlements yet.</Text>
-          <SettlementForm />
+          <SettlementForm onCreation={loadData} />
         </>
       ) : (
         settlements.map((settlement) => (
@@ -80,10 +88,17 @@ const UserDashboard = () => {
               Created at: {new Date(settlement.created_at).toLocaleString()}
             </Text>
             <Link to={`/settlement/view/${settlement.id}`}>
-              <Button mt="2" colorScheme="teal">
+              <Button mt="2" colorScheme="teal" mr="2">
                 Enter Settlement
               </Button>
             </Link>
+            <Button
+              mt="2"
+              colorScheme="red"
+              onClick={() => handleDelete(settlement.id)}
+            >
+              Delete Settlement
+            </Button>
           </Box>
         ))
       )}
@@ -91,4 +106,4 @@ const UserDashboard = () => {
   );
 };
 
-export default UserDashboard;
+export default SettlementDashboard;

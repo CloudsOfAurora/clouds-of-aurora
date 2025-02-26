@@ -14,9 +14,6 @@ import {
   Alert,
   AlertIcon,
   SimpleGrid,
-  Select,
-  Button,
-  Collapse,
   Flex,
 } from "@chakra-ui/react";
 import { fetchSettlers, assignVillager } from "../api";
@@ -29,24 +26,17 @@ const VillagerPanel = forwardRef(
     const [villagers, setVillagers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    // For inline assignment: track dropdown selection per villager.
-    const [assignmentSelections, setAssignmentSelections] = useState({});
-    // Track expanded state per villager card.
-    const [expanded, setExpanded] = useState({});
+    const [expanded, setExpanded] = useState({}); // initially empty (collapsed)
 
-    // Wrap loadVillagers in useCallback so it's stable.
     const loadVillagers = useCallback(async () => {
       try {
         console.debug("[VillagerPanel] Loading villagers for settlement", settlementId);
         setLoading(true);
         const allVillagers = await fetchSettlers();
-        console.debug("[VillagerPanel] All villagers fetched:", allVillagers);
-        // Filter for villagers belonging to the current settlement and not dead.
         const filtered = allVillagers.filter(
           (v) =>
             Number(v.settlement_id) === Number(settlementId) && v.status !== "dead"
         );
-        console.debug("[VillagerPanel] Filtered villagers:", filtered);
         setVillagers(filtered);
         setError("");
       } catch (err) {
@@ -57,7 +47,6 @@ const VillagerPanel = forwardRef(
       }
     }, [settlementId]);
 
-    // Expose refresh method.
     useImperativeHandle(ref, () => ({
       refreshVillagers: loadVillagers,
     }));
@@ -69,45 +58,14 @@ const VillagerPanel = forwardRef(
     }, [loadVillagers]);
 
     const toggleExpand = (villagerId) => {
-      console.debug("[VillagerPanel] Toggling expand for villager", villagerId);
       setExpanded((prev) => ({ ...prev, [villagerId]: !prev[villagerId] }));
     };
 
-    const handleSelectChange = (villagerId, buildingId) => {
-      console.debug("[VillagerPanel] Villager", villagerId, "selects building", buildingId);
-      setAssignmentSelections((prev) => ({ ...prev, [villagerId]: buildingId }));
-    };
-
-    const handleAssign = async (villagerId) => {
-      const buildingId = assignmentSelections[villagerId];
-      if (!buildingId) {
-        alert("Please select a building for this villager.");
-        return;
-      }
-      try {
-        console.debug("[VillagerPanel] Assigning villager", villagerId, "to building", buildingId);
-        const payload = {
-          settlement_id: settlementId,
-          building_id: buildingId,
-          settler_id: villagerId,
-        };
-        await assignVillager(payload);
-        console.debug("[VillagerPanel] Assignment successful for villager", villagerId);
-        await loadVillagers(); // Refresh immediately.
-        if (onAssignmentSuccess) onAssignmentSuccess();
-      } catch (err) {
-        console.error("[VillagerPanel] Error assigning villager:", err);
-        alert(err.response?.data?.error || "Error assigning villager.");
-      }
-    };
-
-    // Compute age from birth_tick.
     const computeAge = (birthTick) => {
       if (birthTick == null || currentTick == null) return "N/A";
       return `${currentTick - birthTick} ticks`;
     };
 
-    // Derive assignment label based on nested objects.
     const getAssignmentInfo = (villager) => {
       let status = "Idle";
       if (villager.gathering_resource_node && villager.gathering_resource_node.name) {
@@ -120,7 +78,6 @@ const VillagerPanel = forwardRef(
       }
       return status;
     };
-    
 
     if (loading) {
       return (
@@ -148,36 +105,31 @@ const VillagerPanel = forwardRef(
           <Text>No villagers found in this settlement.</Text>
         ) : (
           <SimpleGrid columns={[2, 3, 4, 6]} spacing={2}>
-            {villagers.map((villager) => {
-              console.debug("[VillagerPanel] Processing villager:", villager);
-              const assignmentInfo = getAssignmentInfo(villager);
-              return (
-                <Box key={villager.id} borderWidth="1px" borderRadius="md" p="2">
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    onClick={() => toggleExpand(villager.id)}
-                    cursor="pointer"
-                  >
-                    <Heading as="h4" size="xs">
-                      {villager.name}
-                    </Heading>
-                    <Text fontSize="xs">
-                      {expanded[villager.id] ? "▲" : "▼"}
-                    </Text>
-                  </Flex>
-                  <Text fontSize="xs">Status: {assignmentInfo}</Text>
-                  <Text fontSize="xs">Hunger: {villager.hunger}</Text>
-                  <Text fontSize="xs">Experience: {villager.experience}</Text>
-                  <Text fontSize="xs">Age: {computeAge(villager.birth_tick)}</Text>
-                  {settlementPopularity === 1 && (
-                    <Text fontSize="xs" color="green.500">
-                      Happy
-                    </Text>
-                  )}
-                </Box>
-              );
-            })}
+            {villagers.map((villager) => (
+              <Box key={villager.id} borderWidth="1px" borderRadius="md" p="2">
+                <Flex
+                  justify="space-between"
+                  align="center"
+                  onClick={() => toggleExpand(villager.id)}
+                  cursor="pointer"
+                >
+                  <Heading as="h4" size="xs">
+                    {villager.name}
+                  </Heading>
+                  <Text fontSize="xs">
+                    {expanded[villager.id] ? "▲" : "▼"}
+                  </Text>
+                </Flex>
+                <Text fontSize="xs">Status: {getAssignmentInfo(villager)}</Text>
+                {expanded[villager.id] === true && (
+                  <>
+                    <Text fontSize="xs">Hunger: {villager.hunger}</Text>
+                    <Text fontSize="xs">Experience: {villager.experience}</Text>
+                    <Text fontSize="xs">Age: {computeAge(villager.birth_tick)}</Text>
+                  </>
+                )}
+              </Box>
+            ))}
           </SimpleGrid>
         )}
       </Box>

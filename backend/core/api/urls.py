@@ -14,7 +14,8 @@ from core.views import (
     place_building,
     assign_villager,
     gather_resource,
-    toggle_assignment,  
+    toggle_assignment,
+    delete_settlement,  
 )
 
 urlpatterns = [
@@ -29,4 +30,6 @@ urlpatterns = [
     path('lore/', lore_entries_view, name='lore_entries'),
     path('register/', register, name='register'),
     path('current_user/', current_user_view, name='current_user'),
+    path('settlement/<int:id>/delete/', delete_settlement, name='delete_settlement'),
+
 ]
