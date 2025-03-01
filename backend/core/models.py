@@ -67,7 +67,7 @@ class MapTile(models.Model):
         ('bush', 'Bush'),
         ('stone_deposit', 'Stone Deposit'),
         ('mountain', 'Mountain'),
-        ('river', 'River'),
+        ('lake', 'Lake'),
         ('ley_line', 'Magical Ley Line'),
     )
     settlement = models.ForeignKey(Settlement, on_delete=models.CASCADE, related_name='map_tiles')
@@ -106,6 +106,7 @@ class EventLog(models.Model):
         ("villager_hungry", "Villager Hungry"),
         ("villager_dead", "Villager Dead"),
         ("season_changed", "Season Changed"),
+        ("building_finished", "Building Finished"),
     )
     settlement = models.ForeignKey("Settlement", on_delete=models.CASCADE, related_name="events")
     event_type = models.CharField(max_length=50, choices=EVENT_TYPES)
@@ -199,3 +200,12 @@ class ResourceNode(models.Model):
                 self.gatherer.status = "idle"
                 self.gatherer.save(update_fields=["gathering_resource_node", "status"])
             self.delete()
+
+    def sprite_key(self):
+        from core.config import RESOURCE_NODES
+        # Look up the key by matching the node’s name (as defined in your config)
+        for key, cfg in RESOURCE_NODES.items():
+            if cfg.get("name") == self.name:
+                return key
+        # Fallback if no match is found
+        return self.resource_type

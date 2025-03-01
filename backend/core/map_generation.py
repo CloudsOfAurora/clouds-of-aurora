@@ -18,18 +18,16 @@ def generate_map_for_settlement(settlement):
                 coordinate_y=y,
                 terrain_type=terrain_type
             )
-            # Skip resource node generation if tile is river.
-            if terrain_type == "river":
-                continue
-            for key, node in RESOURCE_NODES.items():
-                if random.random() < node["probability"]:
-                    ResourceNode.objects.create(
-                        name=node["name"],
-                        resource_type=node["resource_type"],
-                        quantity=node["initial_quantity"],
-                        max_quantity=node["max_quantity"],
-                        regen_rate=node["regen_rate"],
-                        lore=node["lore"],
-                        map_tile=tile
-                    )
-                    break
+            if terrain_type == "grass":
+                for key, node in RESOURCE_NODES.items():
+                    if random.random() < node["probability"]:
+                        ResourceNode.objects.create(
+                            name=node["name"],
+                            resource_type=node["resource_type"],
+                            quantity=node["initial_quantity"],
+                            max_quantity=node["max_quantity"],
+                            regen_rate=node["regen_rate"],
+                            lore=node["lore"],
+                            map_tile=tile
+                        )
+                        break

@@ -163,10 +163,10 @@ GATHER_RATES = {
 
 # --- Map Generation Settings ---
 TERRAIN_PROBABILITIES = {
-    'grass': 0.5,
-    'forest': 0.5,
-    'mountain': 0.2,
-    'river': 0.2,
+    'grass': 0.7,
+    'forest': 0.3,
+    'mountain': 0.1,
+    'lake': 0.1,
 }
 
 # --- Tile Appearance & Descriptions ---
@@ -174,7 +174,7 @@ TILE_DESCRIPTIONS = {
     'grass': "Fertile patch of grass.",
     'forest': "Dense forest rich in wood.",
     'mountain': "Rugged, rocky terrain.",
-    'river': "Flowing river.",
+    'lake': "Fresh water source.",
 }
 
 # These colors are used for now; in future, sprites can replace them.
@@ -182,14 +182,14 @@ TILE_COLORS = {
     'grass': "#7cfc00",
     'forest': "#228B22",
     'mountain': "#8B4513",
-    'river': "#1E90FF",
+    'lake': "#1E90FF",
 }
 # Placeholder for sprite references (to be used in future)
 TILE_SPRITES = {
     'grass': None,
     'forest': None,
     'mountain': None,
-    'river': None,
+    'lake': None,
 }
 
 # --- Starting Values for New Settlements ---
@@ -217,13 +217,11 @@ SEASON_MODIFIERS = {
 PRODUCTION_RATES = {
     "lumber_mill": {"wood": 2},
     "quarry": {"stone": 2},
-    "farmhouse": {"food": 5},
+    "farmhouse": {"food": 4},
 }
 VILLAGER_CONSUMPTION_RATE = 1
 PRODUCTION_TICK = 1
 FEEDING_TICK = 1
-
-
 
 # --- Warehouse Bonus ---
 WAREHOUSE_BONUS = 200
@@ -239,8 +237,31 @@ BUILDING_DESCRIPTIONS = {
 # --- Villager Settings ---
 STARTING_VILLAGERS = 2
 VILLAGER_NAMES = [
-    "Alice", "Bob"
+    "Ava", "Ben", "Cleo", "Dax", "Elin", "Finn", "Gwen", "Hale",
+    "Iris", "Jude", "Kai", "Lena", "Milo", "Nia", "Otis", "Pia",
+    "Quinn", "Rex", "Sage", "Tess", "Uma", "Vito", "Wren", "Xavi",
+    "Yara", "Zane", "Arlo", "Bree", "Cian", "Dara", "Ewan", "Faye",
+    "Gio", "Hope", "Ines", "Joss", "Kian", "Lior", "Mira", "Nico",
+    "Oren", "Pax", "Rina", "Seth", "Tova", "Uri", "Vera", "Wynn",
+    "Yves", "Zora", "Alden", "Bran", "Caleb", "Dario", "Ember",
+    "Flint", "Gideon", "Haven", "Isa", "Jonas", "Kade", "Liora",
+    "Matteo", "Nola", "Orin", "Petra", "Rowan", "Silas", "Thane",
+    "Ulric", "Vesper", "Wilma", "Xander", "Yelena", "Zephyr",
+    "Aerin", "Blaise", "Cassia", "Dane", "Elara", "Felix", "Gael",
+    "Hollis", "Ivanna", "Jace", "Kael", "Lucian", "Maia", "Nash",
+    "Oona", "Perrin", "Ronan", "Selene", "Torin", "Uriah", "Vail",
+    "Willa", "Xia", "Yoren", "Ziva", "Adric", "Bastian", "Calla",
+    "Dorian", "Elias", "Freya", "Gareth", "Halcyon", "Ivo", "Jorin",
+    "Kieran", "Leif", "Mirelle", "Noctis", "Oberon", "Pallas",
+    "Rhea", "Seren", "Talon", "Ulysses", "Vanna", "Wrenna",
+    "Xanthe", "Yannis", "Zelda", "Alric", "Brisa", "Corin",
+    "Draven", "Eowyn", "Faelan", "Giselle", "Harlan", "Iliana",
+    "Jareth", "Kaida", "Lorien", "Marek", "Niven", "Orla", "Paxton",
+    "Ronan", "Sable", "Taryn", "Ursa", "Varian", "Wyatt", "Xerxes",
+    "Ysolde", "Zorion"
 ]
+
+
 VILLAGER_AGING_INTERVAL = 1
 MAX_VILLAGER_AGE = 500
 EXPERIENCE_GAIN_PER_TICK = 1

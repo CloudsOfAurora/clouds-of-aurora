@@ -5,8 +5,8 @@ import { useParams } from "react-router-dom";
 import { placeBuilding } from "../api";
 
 const GRID_SIZE = 10; // 10x10 grid
-const CANVAS_WIDTH = 300; // pixels
-const CANVAS_HEIGHT = 300; // pixels
+const CANVAS_WIDTH = 480; // pixels
+const CANVAS_HEIGHT = 480; // pixels
 const TILE_WIDTH = CANVAS_WIDTH / GRID_SIZE;
 const TILE_HEIGHT = CANVAS_HEIGHT / GRID_SIZE;
 

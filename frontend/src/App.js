@@ -17,7 +17,8 @@ function App() {
         <Header />
         <Box p="4">
           <Routes>
-            <Route path="/" element={<UserDashboard />} />
+            <Route path="/dashboard" element={<UserDashboard />} />
+            <Route path="/" element={<WelcomePage />} />
             <Route path="/welcome" element={<WelcomePage />} />
             <Route path="/register" element={<RegisterForm />} />
             <Route path="/login" element={<LoginForm />} />

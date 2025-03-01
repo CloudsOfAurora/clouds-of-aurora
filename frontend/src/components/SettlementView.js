@@ -1,3 +1,4 @@
+// src/components/SettlementView.js
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Box,
@@ -41,11 +42,11 @@ const SettlementView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Popup states.
-  const [quickPopupInfo, setQuickPopupInfo] = useState(null);
-  const [quickPopupPos, setQuickPopupPos] = useState({ x: 0, y: 0 });
-  const [detailedPopupInfo, setDetailedPopupInfo] = useState(null);
-  const [detailedPopupPos, setDetailedPopupPos] = useState({ x: 0, y: 0 });
+  // Popup state now stores an object with the associated tile and the type.
+  // Also store the mouse position for proper placement.
+  const [quickPopup, setQuickPopup] = useState(null); // { type, tile }
+  const [detailedPopup, setDetailedPopup] = useState(null); // { type, tile }
+  const [popupPos, setPopupPos] = useState({ x: 0, y: 0 });
 
   // Building placement state.
   const [placementMode, setPlacementMode] = useState(false);
@@ -105,39 +106,28 @@ const SettlementView = () => {
     return () => clearInterval(interval);
   }, [id, placementMode, loadSettlementData, loadGameState, loadMapTiles]);
 
-  // Auto-dismiss quick popup after 5 seconds.
+  // Auto-dismiss popups after 5 seconds.
   useEffect(() => {
-    if (quickPopupInfo) {
-      const timer = setTimeout(() => setQuickPopupInfo(null), 5000);
+    if (quickPopup) {
+      const timer = setTimeout(() => setQuickPopup(null), 8000);
       return () => clearTimeout(timer);
     }
-  }, [quickPopupInfo]);
-
-  // Auto-dismiss detailed popup after 5 seconds.
+  }, [quickPopup]);
   useEffect(() => {
-    if (detailedPopupInfo) {
-      const timer = setTimeout(() => setDetailedPopupInfo(null), 5000);
+    if (detailedPopup) {
+      const timer = setTimeout(() => setDetailedPopup(null), 8000);
       return () => clearTimeout(timer);
     }
-  }, [detailedPopupInfo]);
+  }, [detailedPopup]);
 
-  // Helper: show updated info popup using the latest tile data.
-  const showUpdatedInfo = (tile, pos) => {
-    if (tile.resource_nodes && tile.resource_nodes.length > 0) {
-      setQuickPopupInfo({ type: "resource_node", tile });
-    } else {
-      const building = buildings.find(
-        (b) =>
-          b.coordinate_x === tile.coordinate_x &&
-          b.coordinate_y === tile.coordinate_y
-      );
-      if (building) {
-        setQuickPopupInfo({ type: "building", building });
-      } else {
-        setQuickPopupInfo({ type: "tile", tile });
-      }
-    }
-    setQuickPopupPos(pos);
+  // Helper functions to show pop-ups.
+  const showQuickPopup = (type, tile, pos) => {
+    setQuickPopup({ type, tile });
+    setPopupPos(pos);
+  };
+  const showDetailedPopup = (type, tile, pos) => {
+    setDetailedPopup({ type, tile });
+    setPopupPos(pos);
   };
 
   // Handler for building placement.
@@ -169,16 +159,18 @@ const SettlementView = () => {
   // Unified tile interaction callback.
   const handleTileInteraction = useCallback(
     async ({ type, tile, pos }) => {
+      // Ensure pop-ups appear at the current mouse position.
+      setPopupPos(pos);
       if (placementMode && type === "single") {
-        // In placement mode, single click places building.
+        // In placement mode, single click places a building.
         handleTilePlacement(tile);
         return;
       }
       if (type === "single") {
-        // Single click: simply show the info popup using current state.
+        // Single click: show quick popup with title info.
         if (tile) {
           if (tile.resource_nodes && tile.resource_nodes.length > 0) {
-            setQuickPopupInfo({ type: "resource_node", tile });
+            showQuickPopup("resource_node", tile, pos);
           } else {
             const building = buildings.find(
               (b) =>
@@ -186,15 +178,14 @@ const SettlementView = () => {
                 b.coordinate_y === tile.coordinate_y
             );
             if (building) {
-              setQuickPopupInfo({ type: "building", building });
+              showQuickPopup("building", tile, pos);
             } else {
-              setQuickPopupInfo({ type: "tile", tile });
+              showQuickPopup("tile", tile, pos);
             }
           }
-          setQuickPopupPos(pos);
         }
       } else if (type === "double") {
-        // Double click: perform assignment toggle then re-fetch updated tile info.
+        // Double click: toggle assignment and update quick popup.
         if (tile.resource_nodes && tile.resource_nodes.length > 0) {
           const node = tile.resource_nodes[0];
           try {
@@ -203,7 +194,6 @@ const SettlementView = () => {
               object_type: "resource_node",
               object_id: node.id,
             });
-            // Fetch updated tile info.
             const updatedTiles = await loadMapTiles();
             await loadSettlementData();
             if (
@@ -212,11 +202,14 @@ const SettlementView = () => {
             ) {
               villagerPanelRef.current.refreshVillagers();
             }
+            // Look up the updated tile using its coordinates.
             const updatedTile = updatedTiles.find(
-              (t) => t.coordinate_x === tile.coordinate_x && t.coordinate_y === tile.coordinate_y
+              (t) =>
+                t.coordinate_x === tile.coordinate_x &&
+                t.coordinate_y === tile.coordinate_y
             );
             if (updatedTile) {
-              showUpdatedInfo(updatedTile, pos);
+              showQuickPopup("resource_node", updatedTile, pos);
             }
           } catch (err) {
             console.error(
@@ -237,7 +230,7 @@ const SettlementView = () => {
                 object_id: building.id,
               });
               await loadSettlementData();
-              showUpdatedInfo(tile, pos);
+              showQuickPopup("building", tile, pos);
             } catch (err) {
               console.error(
                 err.response?.data?.error || "Error toggling building assignment."
@@ -246,29 +239,119 @@ const SettlementView = () => {
           }
         }
       } else if (type === "right") {
-        // Right click: show detailed popup.
+        // Right click: show detailed popup with extra info.
         if (tile.resource_nodes && tile.resource_nodes.length > 0) {
-          setDetailedPopupInfo({ type: "resource_node", tile });
+          showDetailedPopup("resource_node", tile, pos);
         } else {
           const building = buildings.find(
             (b) =>
               b.coordinate_x === tile.coordinate_x &&
               b.coordinate_y === tile.coordinate_y
           );
-          setDetailedPopupInfo({ type: building ? "building" : "tile", tile });
+          showDetailedPopup(building ? "building" : "tile", tile, pos);
         }
-        setDetailedPopupPos(pos);
       }
     },
-    [
-      placementMode,
-      id,
-      buildings,
-      loadMapTiles,
-      loadSettlementData,
-      villagerPanelRef,
-    ]
+    [placementMode, id, buildings, loadMapTiles, loadSettlementData, villagerPanelRef]
   );
+
+  // Popup render functions now use the stored tile from the popup state
+  const renderQuickPopupContent = () => {
+    if (!quickPopup) return null;
+    const { type, tile } = quickPopup;
+    if (type === "resource_node") {
+      // Look up updated tile from mapTiles
+      const updatedTile =
+        mapTiles.find(
+          (t) =>
+            t.coordinate_x === tile.coordinate_x &&
+            t.coordinate_y === tile.coordinate_y
+        ) || tile;
+      const node = updatedTile.resource_nodes ? updatedTile.resource_nodes[0] : null;
+      if (!node) return null;
+      return (
+        <>
+          <strong>{node.name}</strong>
+          <br />
+          Status: {node.gatherer_id ? "Gathering" : "Idle"}
+          <br />
+          Remaining: {node.quantity} / {node.max_quantity}
+        </>
+      );
+    } else if (type === "building") {
+      const updatedBuilding = buildings.find(
+        (b) =>
+          b.coordinate_x === tile.coordinate_x &&
+          b.coordinate_y === tile.coordinate_y
+      );
+      if (!updatedBuilding) return null;
+      return (
+        <>
+          <strong>{updatedBuilding.building_type.toUpperCase()}</strong>
+          <br />
+          Assigned: {updatedBuilding.assigned ? updatedBuilding.assigned : "Unoccupied"}
+        </>
+      );
+    } else if (type === "tile") {
+      const updatedTile =
+        mapTiles.find(
+          (t) =>
+            t.coordinate_x === tile.coordinate_x &&
+            t.coordinate_y === tile.coordinate_y
+        ) || tile;
+      return (
+        <>
+          <strong>{updatedTile.terrain_type ? updatedTile.terrain_type.toUpperCase() : "TILE"}</strong>
+        </>
+      );
+    }
+  };
+
+  const renderDetailedPopupContent = () => {
+    if (!detailedPopup) return null;
+    const { type, tile } = detailedPopup;
+    if (type === "resource_node") {
+      const updatedTile =
+        mapTiles.find(
+          (t) =>
+            t.coordinate_x === tile.coordinate_x &&
+            t.coordinate_y === tile.coordinate_y
+        ) || tile;
+      const node = updatedTile.resource_nodes ? updatedTile.resource_nodes[0] : null;
+      if (!node) return null;
+      return (
+        <>
+          {node.lore}
+          <br />
+          Current Quantity: {node.quantity} / {node.max_quantity}
+        </>
+      );
+    } else if (type === "building") {
+      const updatedBuilding = buildings.find(
+        (b) =>
+          b.coordinate_x === tile.coordinate_x &&
+          b.coordinate_y === tile.coordinate_y
+      );
+      if (!updatedBuilding) return null;
+      return (
+        <>
+          {updatedBuilding.description || "No further details available."}
+        </>
+      );
+    } else if (type === "tile") {
+      const updatedTile =
+        mapTiles.find(
+          (t) =>
+            t.coordinate_x === tile.coordinate_x &&
+            t.coordinate_y === tile.coordinate_y
+        ) || tile;
+      return (
+        <>
+          {updatedTile.description || "No description available."}
+        </>
+      );
+    }
+  };
 
   if (loading || !settlementData) {
     return (
@@ -392,11 +475,11 @@ const SettlementView = () => {
       </Box>
 
       {/* Quick Popup (Left Click) */}
-      {quickPopupInfo && (
+      {quickPopup && (
         <Box
           position="absolute"
-          top={`${quickPopupPos.y}px`}
-          left={`${quickPopupPos.x}px`}
+          top={`${popupPos.y}px`}
+          left={`${popupPos.x}px`}
           transform="translate(-50%, -110%)"
           pointerEvents="auto"
           zIndex="20"
@@ -410,38 +493,18 @@ const SettlementView = () => {
           textAlign="center"
           whiteSpace="normal"
           wordBreak="break-word"
-          onMouseLeave={() => setQuickPopupInfo(null)}
+          onMouseLeave={() => setQuickPopup(null)}
         >
-          {quickPopupInfo.type === "resource_node" && (
-            <>
-              <strong>{quickPopupInfo.tile.resource_nodes[0].name}</strong>
-              <br />
-              Status: {quickPopupInfo.tile.resource_nodes[0].gatherer_id ? "Gathering" : "Idle"}
-              <br />
-              Remaining: {quickPopupInfo.tile.resource_nodes[0].quantity} / {quickPopupInfo.tile.resource_nodes[0].max_quantity}
-            </>
-          )}
-          {quickPopupInfo.type === "building" && (
-            <>
-              <strong>{quickPopupInfo.building.building_type.toUpperCase()}</strong>
-              <br />
-              Assigned: {quickPopupInfo.building.assigned ? quickPopupInfo.building.assigned : "Unoccupied"}
-            </>
-          )}
-          {quickPopupInfo.type === "tile" && (
-            <>
-              <strong>{quickPopupInfo.tile.terrain_type ? quickPopupInfo.tile.terrain_type.toUpperCase() : "TILE"}</strong>
-            </>
-          )}
+          {renderQuickPopupContent()}
         </Box>
       )}
 
       {/* Detailed Popup (Right Click) */}
-      {detailedPopupInfo && (
+      {detailedPopup && (
         <Box
           position="absolute"
-          top={`${detailedPopupPos.y}px`}
-          left={`${detailedPopupPos.x}px`}
+          top={`${popupPos.y}px`}
+          left={`${popupPos.x}px`}
           transform="translate(-50%, -110%)"
           zIndex="30"
           bg="blue.800"
@@ -454,39 +517,9 @@ const SettlementView = () => {
           textAlign="center"
           whiteSpace="normal"
           wordBreak="break-word"
-          onMouseLeave={() => setDetailedPopupInfo(null)}
+          onMouseLeave={() => setDetailedPopup(null)}
         >
-          {detailedPopupInfo.type === "resource_node" && (
-            <>
-              <strong>{detailedPopupInfo.tile.resource_nodes[0].resource_type.toUpperCase()}</strong>
-              <br />
-              {detailedPopupInfo.tile.resource_nodes[0].lore}
-            </>
-          )}
-          {detailedPopupInfo.type === "building" && (
-            <>
-              <strong>
-                {buildings.find(
-                  (b) =>
-                    b.coordinate_x === detailedPopupInfo.tile.coordinate_x &&
-                    b.coordinate_y === detailedPopupInfo.tile.coordinate_y
-                )?.building_type.toUpperCase() || "BUILDING"}
-              </strong>
-              <br />
-              {buildings.find(
-                (b) =>
-                  b.coordinate_x === detailedPopupInfo.tile.coordinate_x &&
-                  b.coordinate_y === detailedPopupInfo.tile.coordinate_y
-              )?.description || ""}
-            </>
-          )}
-          {detailedPopupInfo.type === "tile" && (
-            <>
-              <strong>{detailedPopupInfo.tile.terrain_type ? detailedPopupInfo.tile.terrain_type.toUpperCase() : "TILE"}</strong>
-              <br />
-              {detailedPopupInfo.tile.description || "No description available."}
-            </>
-          )}
+          {renderDetailedPopupContent()}
         </Box>
       )}
     </Flex>

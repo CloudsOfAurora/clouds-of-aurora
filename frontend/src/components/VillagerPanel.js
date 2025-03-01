@@ -16,7 +16,7 @@ import {
   SimpleGrid,
   Flex,
 } from "@chakra-ui/react";
-import { fetchSettlers, assignVillager } from "../api";
+import { fetchSettlers } from "../api";
 
 const VillagerPanel = forwardRef(
   (
@@ -26,7 +26,7 @@ const VillagerPanel = forwardRef(
     const [villagers, setVillagers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [expanded, setExpanded] = useState({}); // initially empty (collapsed)
+    const [expanded, setExpanded] = useState({});
 
     const loadVillagers = useCallback(async () => {
       try {
@@ -121,7 +121,7 @@ const VillagerPanel = forwardRef(
                   </Text>
                 </Flex>
                 <Text fontSize="xs">Status: {getAssignmentInfo(villager)}</Text>
-                {expanded[villager.id] === true && (
+                {expanded[villager.id] && (
                   <>
                     <Text fontSize="xs">Hunger: {villager.hunger}</Text>
                     <Text fontSize="xs">Experience: {villager.experience}</Text>
